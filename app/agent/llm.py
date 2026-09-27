@@ -1,26 +1,35 @@
 """
-电商问数 Agent 使用的大模型实例
+[已废弃] LLM 模块级单例（01 文档 §4 #3）
 
-集中初始化一个 OpenAI 兼容的 Chat Model，供节点或本地测试直接复用
+旧代码用法 `from app.agent.llm import llm` 已被多模型架构取代：
+  - 节点内：llm = runtime.context["llm"]        （经 DataAgentContext 按请求注入）
+  - 应用层：from app.agent.llm_factory import create_llm
+本文件保留为"防呆兼容层"：任何遗漏迁移的引用会立即得到带迁移指引的 RuntimeError，
+而不是静默用错模型。llm_factory.py 就绪后本文件不再提供任何可用的模型实例。
 """
-from app.conf.app_config import app_config
-
-# 统一从配置读取模型三件套，节点只复用 llm，不重复初始化模型连接
+import asyncio
 import os
 
-from langchain.chat_models import init_chat_model
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
+from app.agent.llm_factory import create_llm
 
-# 1. 定义 DeepSeek 模型（关键：必须填 base_url 和 api_key）
-llm = init_chat_model(
-    model="deepseek-v4-pro",
-    base_url="https://api.deepseek.com/v1",  # DeepSeek 官方接口地址
-    api_key=os.getenv("DEEPSEEK_API_KEY"),       # 你必须填自己的密钥
-    model_provider="deepseek",          # 提供商
-    temperature=0.7,                         # 可选参数
-)
+
+def __getattr__(name: str):
+    """模块级属性拦截（PEP 562）：仅拦截 llm 这个历史名字，其余属性照常报 AttributeError"""
+    if name == "llm":
+        raise RuntimeError(
+            "llm 模块级单例已移除（01 文档多模型改造）："
+            "节点内请使用 runtime.context['llm']；"
+            "应用层请使用 from app.agent.llm_factory import create_llm"
+        )
+    raise AttributeError(f"module 'app.agent.llm' has no attribute '{name}'")
+
+
 if __name__ == "__main__":
-    # 本地快速验证 LLM 配置是否能正常调用
-    print(llm.invoke("你好").content)
+    # 本地自测：工厂直接创建默认模型，验证连通性（替代旧单例的 invoke 自测）
+    llm = create_llm()
+
+    async def _main():
+        resp = await llm.ainvoke("用一句话介绍你自己")
+        print(resp.content)
+
+    asyncio.run(_main())

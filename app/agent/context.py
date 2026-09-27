@@ -5,10 +5,12 @@ Context 用来保存一次图执行过程中不参与状态合并的外部依赖
 本章放入多路召回需要的 Embedding 客户端 Qdrant 仓储和 ES 仓储
 召回信息合并阶段还会访问 Meta MySQL，用于按 id 补齐字段和表结构元数据
 这样节点可以通过 runtime.context 复用外部工具，而不需要把连接类对象塞进 State
+多模型改造（01 文档）后新增：按请求创建的 LLM 实例与 SSE 能力注入容器
 """
 
 from typing import TypedDict
 
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 
 from app.repositories.es.value_es_repository import ValueESRepository
@@ -16,6 +18,17 @@ from app.repositories.mysql.meta.meta_mysql_repository import MetaMySQLRepositor
 from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
 from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
 from app.repositories.mysql.dw.dw_mysql_repository import DWMySQLRepository
+
+
+class CapabilityHolder:
+    """Request 级可变容器：路由节点写入选中的能力，QueryService 读取后注入 SSE 事件
+    （04 文档 §3.4 的 tier-0 落地件）。
+
+    ⚠️ 必须每个请求新建实例（DataAgentContext 组装时创建）—— 若做成模块级单例，
+    并发请求会互相覆盖能力标识，导致 SSE 事件的 capability 串话（00 红线 #10）
+    """
+    value: str | None = None
+
 
 class DataAgentContext(TypedDict):
     """LangGraph Runtime 中传递的上下文对象"""
@@ -32,3 +45,8 @@ class DataAgentContext(TypedDict):
     meta_mysql_repository: MetaMySQLRepository
 
     dw_mysql_repository: DWMySQLRepository
+
+    # [01 文档] 按请求创建的 LLM 实例（已挂 usage tracker），节点经 runtime.context 取用
+    llm: BaseChatModel
+    # [04 文档] SSE capability 注入容器：路由节点写入，QueryService 逐事件读取
+    capability_holder: CapabilityHolder
