@@ -345,9 +345,6 @@ DELIMITER ;
 CALL generate_dim_date_fix();
 DROP PROCEDURE generate_dim_date_fix;
 
-CALL generate_dim_date_ext();
-DROP PROCEDURE generate_dim_date_ext;
-
 DROP TABLE IF EXISTS fact_order;
 CREATE TABLE fact_order
 (

@@ -16,8 +16,9 @@ import { Composer } from "./components/Composer";
 import { EmptyState } from "./components/EmptyState";
 import { MessageBubble } from "./components/MessageBubble";
 import { streamQuery } from "./lib/agentApi";
+import { fetchCapabilities, fetchModels, isAbortError } from "./lib/agentApi";
 import { cn, summarizeResult } from "./lib/format";
-import type { AgentEvent, ChatMessage, StepState } from "./types/agent";
+import type { AgentEvent, CapabilityInfo, ChatMessage, ModelInfo, StepState } from "./types/agent";
 import ManualPage from "./components/ManualPage";
 
 const examples = [
@@ -49,6 +50,51 @@ export default function App() {
   const [activeController, setActiveController] = useState<AbortController | null>(null);
   const [showManual, setShowManual] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // ==== 模型与能力芯片（02 文档 §3.6：模型=localStorage 跨会话偏好；thread_id=sessionStorage 会话隔离）====
+  const [models, setModels] = useState<ModelInfo[]>([]);            // 空 = 后端不可达，按钮隐藏
+  const [defaultModel, setDefaultModel] = useState("");
+  const [selectedModel, setSelectedModel] = useState("");           // 空串 = 请求不带 model 字段
+  const [capabilities, setCapabilities] = useState<CapabilityInfo[]>([]);
+  const [selectedCapability, setSelectedCapability] = useState(""); // 空串 = 未选芯片（自动路由）
+
+  useEffect(() => {
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const data = await fetchModels(controller.signal);
+        setModels(data.providers);
+        setDefaultModel(data.default);
+        // localStorage 旧值校验：不再存在的 provider 重置为后端 default
+        const saved = localStorage.getItem("agent_model");
+        setSelectedModel(saved && data.providers.some((m) => m.name === saved) ? saved : data.default);
+      } catch {
+        setModels([]);          // 降级：按钮隐藏、请求不带 model（02 §3.5 降级链）
+      }
+      try {
+        const caps = await fetchCapabilities(controller.signal);
+        setCapabilities(caps.capabilities);
+        const savedCap = localStorage.getItem("agent_capability") ?? "";
+        // 持久化的芯片选中值必须仍在可选列表中（否则重置为未选）
+        setSelectedCapability(caps.capabilities.some((c) => c.name === savedCap) ? savedCap : "");
+      } catch {
+        setCapabilities([]);    // 降级：芯片不渲染、走自动路由
+      }
+    })();
+    return () => controller.abort();
+  }, []);
+
+  const handleModelChange = (name: string) => {
+    setSelectedModel(name);
+    localStorage.setItem("agent_model", name);
+  };
+
+  // 芯片是"模式开关"：再点取消（传空串）即恢复自动路由（04 文档 tier-0 语义）
+  const handleCapabilityChange = (name: string) => {
+    setSelectedCapability(name);
+    if (name) localStorage.setItem("agent_capability", name);
+    else localStorage.removeItem("agent_capability");
+  };
 
   // 首次访问自动显示手册
   useEffect(() => {
@@ -141,9 +187,14 @@ export default function App() {
     };
 
     try {
-      await streamQuery(query, { signal: controller.signal, onEvent });
+      await streamQuery(query, {
+        signal: controller.signal,
+        onEvent,
+        model: selectedModel || undefined,        // 未选择/降级 → 字段缺省
+        capability: selectedCapability || undefined,
+      });
     } catch (error) {
-      const isAbort = error instanceof DOMException && error.name === "AbortError";
+      const isAbort = isAbortError(error);
       setMessages((current) =>
         current.map((message) =>
           message.id === assistantId
@@ -307,6 +358,13 @@ export default function App() {
             value={draft}
             disabled={!canSubmit}
             isStreaming={isStreaming}
+            models={models}
+            defaultModel={defaultModel}
+            selectedModel={selectedModel}
+            onModelChange={handleModelChange}
+            capabilities={capabilities}
+            selectedCapability={selectedCapability}
+            onCapabilityChange={handleCapabilityChange}
             onChange={setDraft}
             onSubmit={() => startQuery()}
             onStop={stopQuery}

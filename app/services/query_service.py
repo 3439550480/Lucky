@@ -76,6 +76,7 @@ class QueryService:
             capability_source="",
             tool_calls=[],
         )
+        holder = CapabilityHolder()                                  # [04] 每请求新建（防串话）
         context = DataAgentContext(
             column_qdrant_repository=self.column_qdrant_repository,
             embedding_client=self.embedding_client,
@@ -84,7 +85,7 @@ class QueryService:
             meta_mysql_repository=self.meta_mysql_repository,
             dw_mysql_repository=self.dw_mysql_repository,
             llm=create_llm(provider_name, usage_tracker=tracker),   # [01] 按请求实例化
-            capability_holder=CapabilityHolder(),                    # [04] 每请求新建（防串话）
+            capability_holder=holder,
             capability_registry=registry,
             usage_tracker=tracker,
         )
