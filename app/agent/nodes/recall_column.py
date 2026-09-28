@@ -11,7 +11,7 @@ from langchain_core.prompts import PromptTemplate
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
-from app.agent.llm import llm
+from app.agent.context import DataAgentContext
 from app.agent.state import DataAgentState
 from app.core.log import logger
 from app.entities.column_info import ColumnInfo
@@ -22,6 +22,7 @@ async def recall_column(state: DataAgentState, runtime: Runtime[DataAgentContext
     """召回和用户问题语义相关的字段元数据"""
 
     writer = runtime.stream_writer
+    llm = runtime.context["llm"]   # [01 迁移] 用户选择的生成模型（替换 llm 模块级单例）
     step = "召回字段信息"
     writer({"type": "progress", "step": step, "status": "running"})
 

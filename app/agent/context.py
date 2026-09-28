@@ -13,6 +13,8 @@ from typing import TypedDict
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 
+from app.agent.capabilities.registry import CapabilityRegistry
+from app.agent.usage import LLMUsageTracker
 from app.repositories.es.value_es_repository import ValueESRepository
 from app.repositories.mysql.meta.meta_mysql_repository import MetaMySQLRepository
 from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
@@ -50,3 +52,7 @@ class DataAgentContext(TypedDict):
     llm: BaseChatModel
     # [04 文档] SSE capability 注入容器：路由节点写入，QueryService 逐事件读取
     capability_holder: CapabilityHolder
+    # [04 文档] 能力注册表（只读配置对象，graph 组装时加载，安全共享）
+    capability_registry: "CapabilityRegistry"
+    # [04 文档] 请求级用量采集器（路由分类专用 LLM 的调用也计入同一份账）
+    usage_tracker: "LLMUsageTracker"

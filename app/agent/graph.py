@@ -1,33 +1,35 @@
 """
-电商问数 Agent 图编排
+电商问数 Agent 图编排 —— 能力路由版（04 文档）
 
-使用 LangGraph 把问数智能体的各个节点串成一条可观测的执行链路
-当前链路已经落地关键词抽取和多路召回，字段和指标走 Qdrant 向量检索，字段取值走 ES 全文检索
-整体流程先抽取用户问题关键词，再并行召回字段 字段取值和指标信息，
-随后合并召回结果 过滤候选表和指标 补充额外上下文，最后生成 校验 修正并执行 SQL
+链路：START → route_capability（五级递进路由，04 §3.2）→ 按能力 entry 分发：
+  dataquery → 原问数 19 节点链路（内部逻辑未动，04 红线）
+  default   → default_answer（通用对话，模型自由发挥）
+问数链路内：抽取关键词 → 三路召回并行 → 合并 → 表/指标过滤 → 补上下文
+→ 生成 SQL → 校验 →（错误）修正循环（最多 max_retries 次）→ 执行 → 解释结果
 """
-
 import asyncio
 
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
+from langgraph.checkpoint.memory import InMemorySaver
 
+from app.agent.capabilities.registry import registry
+from app.agent.capabilities.router import route_capability
 from app.agent.context import DataAgentContext
 from app.agent.nodes.add_extra_context import add_extra_context
 from app.agent.nodes.correct_sql import correct_sql
+from app.agent.nodes.default_answer import default_answer
 from app.agent.nodes.explain_result import explain_result
 from app.agent.nodes.extract_keywords import extract_keywords
 from app.agent.nodes.fail import fail
 from app.agent.nodes.filter_metric import filter_metric
 from app.agent.nodes.filter_table import filter_table
 from app.agent.nodes.generate_sql import generate_sql
-from app.agent.nodes.intent_classify import intent_classify
 from app.agent.nodes.merge_retrieved_info import merge_retrieved_info
 from app.agent.nodes.recall_column import recall_column
 from app.agent.nodes.recall_metric import recall_metric
 from app.agent.nodes.recall_value import recall_value
 from app.agent.nodes.run_sql import run_sql
-from app.agent.nodes.simple_answer import recap_answer, chitchat_answer, help_answer
 from app.agent.nodes.validate_sql import validate_sql
 from app.agent.state import DataAgentState
 from app.clients.embedding_client_manager import embedding_client_manager
@@ -36,19 +38,16 @@ from app.clients.mysql_client_manager import (
     meta_mysql_client_manager, dw_mysql_client_manager,
 )
 from app.clients.qdrant_client_manager import qdrant_client_manager
-from app.conf.app_config import app_config
 from app.repositories.es.value_es_repository import ValueESRepository
 from app.repositories.mysql.dw.dw_mysql_repository import DWMySQLRepository
 from app.repositories.mysql.meta.meta_mysql_repository import MetaMySQLRepository
 from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
 from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
-from langgraph.checkpoint.memory import InMemorySaver
 
 # StateGraph 声明整张图使用的状态结构和运行时上下文结构
 graph_builder = StateGraph(state_schema=DataAgentState, context_schema=DataAgentContext)
 
-# 注册节点：每个节点负责问数链路中的一个清晰步骤
-graph_builder.add_node("start_recall", lambda state: state)  # 空节点，不做任何修改
+# ---- 注册节点：问数链路（dataquery 能力，04 红线：内部逻辑未动）----
 graph_builder.add_node("extract_keywords", extract_keywords)
 graph_builder.add_node("recall_column", recall_column)
 graph_builder.add_node("recall_value", recall_value)
@@ -63,52 +62,38 @@ graph_builder.add_node("correct_sql", correct_sql)
 graph_builder.add_node("run_sql", run_sql)
 graph_builder.add_node("explain_result", explain_result)
 graph_builder.add_node("fail", fail)
-graph_builder.add_node("intent_classify", intent_classify)
-graph_builder.add_node("recap_answer", recap_answer)
-graph_builder.add_node("chitchat_answer", chitchat_answer)
-graph_builder.add_node("help_answer", help_answer)
 
-# 从用户问题开始，先抽取关键词作为后续检索的基础
-# 定义边（执行顺序）
+# ---- 注册节点：能力路由 + default 能力（04 文档）----
+graph_builder.add_node("route_capability", route_capability)
+graph_builder.add_node("default_answer", default_answer)
 
-# 开始节点直接进入意图分类
-graph_builder.add_edge(START, "intent_classify")
+# ---- 注册表 fail-fast 校验：能力 entry / routing 兜底必须指向已注册节点（04 §2.2）----
+registry.validate_entries(set(graph_builder.nodes))
 
-def route_by_intent(state: DataAgentState) -> str:
-    intent = state.get("intent", "data_query")
-    if intent in ("data_query", "follow_up"):
-        return "extract_keywords"      # 需要查询，继续走原流程
-    elif intent == "recap":
-        return "recap_answer"
-    elif intent == "chitchat":
-        return "chitchat_answer"
-    elif intent == "help":
-        return "help_answer"
-    else:
-        return "extract_keywords"      # 默认走查询
+# START → 能力路由（取代原 intent_classify 五分类）
+graph_builder.add_edge(START, "route_capability")
 
+
+def route_by_capability(state: DataAgentState) -> str:
+    """按路由选中的能力分发到其 entry。
+    path_map 由 registry 动态构建 —— 新增能力零路由改动（04 文档核心承诺）"""
+    capability = state.get("capability") or registry.default_capability
+    cap = registry.capabilities.get(capability) or registry.capabilities[registry.default_capability]
+    return cap.entry
+
+
+path_map = {cap.entry: cap.entry for cap in registry.capabilities.values()}
 graph_builder.add_conditional_edges(
-    source="intent_classify",
-    path=route_by_intent,
-    path_map={
-        "extract_keywords": "extract_keywords",
-        "recap_answer": "recap_answer",
-        "chitchat_answer": "chitchat_answer",
-        "help_answer": "help_answer",
-    }
+    source="route_capability",
+    path=route_by_capability,
+    path_map=path_map,
 )
 
-# 简单回答节点直接结束
-graph_builder.add_edge("recap_answer", END)
-graph_builder.add_edge("chitchat_answer", END)
-graph_builder.add_edge("help_answer", END)
+# default 能力：回答即终点
+graph_builder.add_edge("default_answer", END)
 
-# graph_builder.add_edge("extract_keywords", "start_recall")
-#
-# # start_recall 并行分发到三路召回
-# graph_builder.add_edge("start_recall", "recall_column")
-# graph_builder.add_edge("start_recall", "recall_value")
-# graph_builder.add_edge("start_recall", "recall_metric")
+# ---- 问数链路边（原样保留）----
+# 抽取关键词后，三路召回并行扇出
 graph_builder.add_edge("extract_keywords", "recall_column")
 graph_builder.add_edge("extract_keywords", "recall_value")
 graph_builder.add_edge("extract_keywords", "recall_metric")
@@ -129,20 +114,21 @@ graph_builder.add_edge("add_extra_context", "generate_sql")
 graph_builder.add_edge("generate_sql", "validate_sql")
 
 
-
 def route_after_validate(state: DataAgentState):
     if state.get("error") is None:
         return "run_sql"
     return "correct_sql"
 
+
 def route_after_correct(state: DataAgentState):
     max_retries = app_config.sql.max_retries
-    retry_count = state.get("retry_count",0)
+    retry_count = state.get("retry_count", 0)
     if retry_count < max_retries:
         return "validate_sql"
     else:
         return "fail"
-# SQL 校验通过就直接执行，校验失败则先进入修正节点
+
+
 graph_builder.add_conditional_edges(
     source="validate_sql",
     path=route_after_validate,
@@ -155,25 +141,17 @@ graph_builder.add_conditional_edges(
     path_map={"validate_sql": "validate_sql", "fail": "fail"},
 )
 
-# 在生产级系统里，通常会扩展成带次数限制的循环：
-# 生成 SQL -> 校验 -> 校正 -> 再校验 -> 最多重试 N 次 -> 执行或返回失败
-# 从 correct_sql 节点到 run_sql 节点的边，只有当流程经过 correct_sql 节点时才会用到这条边。
 graph_builder.add_edge("run_sql", "explain_result")
 graph_builder.add_edge("explain_result", END)
-
-
 
 # 编译后的 graph 是对外使用的 Agent 执行入口
 checkpointer = InMemorySaver()
 graph = graph_builder.compile(checkpointer=checkpointer)
 
-# print(graph.get_graph().draw_mermaid())
-
 if __name__ == "__main__":
 
     async def test():
-        """本地调试关键词抽取和字段 指标 取值三路召回链路"""
-
+        """本地调试：走一遍能力路由 + 问数链路"""
         # 多路召回会同时访问 Qdrant、Embedding 和 Elasticsearch，所以测试入口先初始化依赖
         qdrant_client_manager.init()
         embedding_client_manager.init()
@@ -181,24 +159,22 @@ if __name__ == "__main__":
         meta_mysql_client_manager.init()
         dw_mysql_client_manager.init()
 
-        # 合并召回信息时会按字段 id 表 id 查询 Meta MySQL，所以这里额外创建元数据仓储
+        from app.agent.llm_factory import create_llm
+        from app.agent.usage import LLMUsageTracker
+
         async with (
             meta_mysql_client_manager.session_factory() as meta_session,
             dw_mysql_client_manager.session_factory() as dw_session,
         ):
             meta_mysql_repository = MetaMySQLRepository(meta_session)
             dw_mysql_repository = DWMySQLRepository(dw_session)
-
-            # 字段和指标分别使用不同 Qdrant collection，取值检索使用 ES index
-            column_qdrant_repository = ColumnQdrantRepository(
-                qdrant_client_manager.client
-            )
-            metric_qdrant_repository = MetricQdrantRepository(
-                qdrant_client_manager.client
-            )
+            column_qdrant_repository = ColumnQdrantRepository(qdrant_client_manager.client)
+            metric_qdrant_repository = MetricQdrantRepository(qdrant_client_manager.client)
             value_es_repository = ValueESRepository(es_client_manager.client)
 
-            # 当前只需要传入原始问题，后续节点会逐步把 keywords 和三类召回结果写回 state
+            tracker = LLMUsageTracker("deepseek", "deepseek-flash")
+            holder = type("Holder", (), {"value": None})()
+
             state = DataAgentState(
                 query="统计华北地区的销售总额和平均额",
                 keywords=[],
@@ -207,7 +183,11 @@ if __name__ == "__main__":
                 retrieved_value_infos=[],
                 table_infos=[],
                 metric_infos=[],
-                error=""
+                error="",
+                requested_capability="",
+                capability="",
+                capability_source="",
+                tool_calls=[],
             )
             context = DataAgentContext(
                 column_qdrant_repository=column_qdrant_repository,
@@ -216,31 +196,20 @@ if __name__ == "__main__":
                 value_es_repository=value_es_repository,
                 meta_mysql_repository=meta_mysql_repository,
                 dw_mysql_repository=dw_mysql_repository,
+                llm=create_llm("deepseek", usage_tracker=tracker),
+                capability_holder=holder,
+                capability_registry=registry,
+                usage_tracker=tracker,
             )
 
-            # stream_mode="custom" 会接收各节点通过 runtime.stream_writer 写出的进度信息
             async for update in graph.astream(
-                    input=state,  # 初始状态
-                    context=context,  # 运行时上下文（依赖注入）
-                    stream_mode="updates"  # 流模式：只返回节点产生的“增量更新”
+                    input=state,
+                    context=context,
+                    config={"configurable": {"thread_id": "debug"}},
+                    stream_mode="updates",
             ):
-                 # print(update)  # 每次迭代打印一个节点产生的状态变更
-                 # 只对 merge_retrieved_info 节点做特殊处理
-                 if "merge_retrieved_info" in update:
-                     tables = update["merge_retrieved_info"].get("table_infos", [])
-                     print("===== 合并后的表信息 =====")
-                     for t in tables:
-                         # 假设 t 是字典，包含 name, role, description 等
-                         print(f"表名: {t['name']} | 角色: {t['role']} | 描述: {t['description']}")
-                     # 你也可以顺便打印指标信息
-                     metrics = update["merge_retrieved_info"].get("metric_infos", [])
-                     print(f"指标: {', '.join([m['name'] for m in metrics])}")
-                     print("------------------------")
-                 else:
-                     # 其他节点（如 extract_keywords, recall_*）保持原样打印
-                     print(update)
+                print(list(update.keys()))
 
-        # 关闭显式创建的异步客户端，避免本地调试时连接资源悬挂
         await qdrant_client_manager.close()
         await es_client_manager.close()
         await meta_mysql_client_manager.close()

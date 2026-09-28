@@ -1,0 +1,32 @@
+# 能力注册表：新增能力 = 此文件加一个条目 + 实现一个统一签名的处理节点
+# 详见 docs/design/04_capability_routing.md §2.1
+capabilities:
+  - name: dataquery                   # 电商问数（现有 19 节点链路）
+    description: 基于电商数仓的指标查询与SQL问答
+    examples:                         # 双重用途：LLM 分类提示词示例 + embedding 安全网向量化语料
+      - "上个月GMV多少"
+      - "华北地区的复购率"
+      - "查询数据：各地区销售额排行"
+      - "统计一下近7天的订单量"
+    entry: extract_keywords           # 图中入口节点名（路由命中后分发到该节点）
+    selectable: true                  # 前端能力芯片可见（tier-0 显式选择）
+    rules:                            # 规则快路径：只放"高度确定"表述，模糊词交由 embedding/LLM 层
+      - "数据查询|查询数据|查一下数据"
+      - "(帮我|给我)?(统计|查询|查一下).{0,12}(GMV|销售额|订单量|复购率|客单价|转化率|销量)"
+  - name: default                     # 默认通用对话（兜底）
+    description: 通用助手对话：闲聊、使用帮助、回顾上次结果、无法归类问题的兜底
+    examples:
+      - "你好"
+      - "你能做什么"
+      - "刚才的结果是什么意思"
+      - "今天天气不错"
+    entry: default_answer
+    selectable: false                 # 兜底能力不出芯片（不选芯片 = 自动识别含 default 兜底）
+    rules:
+      - "^(你好|hi|hello|在吗)"
+
+routing:
+  default_capability: default         # LLM 分类成功但结果不在注册表时兜底
+  error_capability: default           # LLM 调用失败时兜底（通用对话节点致歉并建议重试）
+  classifier_provider: deepseek       # 路由分类专用 LLM（暂定；后续按评估的精准度+速度敲定）
+  embedding_threshold: 0.85           # embedding 安全网命中阈值（余弦相似度）

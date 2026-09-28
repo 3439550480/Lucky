@@ -1,0 +1,21 @@
+{
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "dataquery_search",
+        "description": "查询电商数仓：输入自然语言数据问题，返回 SQL 查询结果",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "用户的原始数据问题"
+            }
+          },
+          "required": ["query"]
+        }
+      }
+    }
+  ]
+}

@@ -84,3 +84,9 @@ class DataAgentState(TypedDict):
     # 对话历史，格式 [{"role": "user", "content": "..."}, {"role": "assistant", "content": "解释或结果"}]
     intent: str          # 意图分类结果
     intent_reply: str    # 意图节点生成的回复（仅用于非查询意图）
+
+    # ==== 能力路由字段（04 文档 §3.5）====
+    requested_capability: str  # 前端芯片显式选择（tier-0 输入；空串 = 自动路由）
+    capability: str            # 路由选中的能力名（v1: dataquery|default）
+    capability_source: str     # 路由来源 user/rules/embedding/llm/fallback（03 评估过滤用）
+    tool_calls: list[str]      # v1 由路由写入（03 tool_metrics 数据源；skill 化后为真实调用序列）

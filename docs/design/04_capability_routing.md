@@ -296,3 +296,34 @@ JsonOutputParser 解析失败、返回空、返回未知值三种情况统一归
 - `state["capability"]` → 03 `intent_metrics`（v1 映射后等价）
 - `state["tool_calls"]` → 03 `tool_metrics` 的 invoked_tools（v1 数据源；skill 化后数据源自动切换，评估接口不变）
 - baseline 对照：`capability_routing=false` 的行为 = 五分类时代的 dataquery 主链路行为，报告可复现
+
+---
+
+## 8. skill 目录契约（2026-09-23 增补，预留方向激活）
+
+**已经项目所有者确认**：能力的实体将演进为 skill 目录——每个技能一个目录，内含提示词说明 + 工具定义。这是"skill+工具化"（§1.1 预留方向）的目录级落地。
+
+### 8.1 目录结构（顶层 `skills/`，与 `prompts/` 平级）
+
+```
+skills/
+├── dataquery/
+│   ├── skill.md             # 技能提示词说明：人设、边界、输出要求（进 05 固定前缀）
+│   └── tools.json           # 工具注明：dataquery_search 的 JSON Schema（05 前缀 + 未来真 function-calling）
+└── default/
+    ├── skill.md
+    └── tools.json           # v1 为空工具集 {"tools": []}
+```
+
+### 8.2 职责与演进路径
+
+| 内容 | v1 | skill 化后 |
+|------|-----|-----------|
+| 路由判别 description | `capability_config.yaml`（进 LLM 分类提示词） | 不变 |
+| 技能说明/人设 | `skills/<name>/skill.md`（05 prefix.py 读取，进固定前缀） | 同左，内容丰富化 |
+| 工具定义 | `skills/<name>/tools.json`（仅作为前缀组成件，让模型感知能力边界） | 真实 function-calling 执行（`state["tool_calls"]` 变为真实调用序列） |
+| description 双写 | yaml（路由判别，短/判别性强）与 skill.md（生成人设，完整）**并存**——受众不同，强行单一来源两头不讨好 | 合并时机随 skill 化评估 |
+
+### 8.3 KV cache 纪律延伸
+
+skill.md / tools.json 内容进入 05 §3.4 固定前缀——**任何变更 = 前缀变更**，须评审并递增 `prefix_version`（05 §3.4 同款纪律）。`build_llm_context` 的切换点：v1 读 yaml description 不动；skill 化时切换为聚合 skill 目录，router 与评估接口不变。

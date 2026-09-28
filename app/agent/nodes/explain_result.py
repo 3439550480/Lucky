@@ -4,7 +4,6 @@ from langchain_core.prompts import PromptTemplate
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
-from app.agent.llm import llm
 from app.agent.state import DataAgentState
 from app.core.log import logger
 from app.prompt.prompt_loader import load_prompt
@@ -13,7 +12,10 @@ from app.prompt.prompt_loader import load_prompt
 async def explain_result(state: DataAgentState, runtime: Runtime[DataAgentContext]):
     """根据用户问题、SQL、查询结果生成自然语言解释"""
     writer = runtime.stream_writer
-    writer("生成结果解释")
+    llm = runtime.context["llm"]   # [01 迁移] 用户选择的生成模型（替换 llm 模块级单例）
+    # [规则3 留档] 课件原版：writer("生成结果解释") —— 裸字符串违反 00 §4.2 事件协议
+    # （非 dict 会让 QueryService/前端 .get 崩溃），修复为标准 progress 事件
+    writer({"type": "progress", "step": "生成结果解释", "status": "running"})
 
     query = state["query"]
     sql = state["sql"]
