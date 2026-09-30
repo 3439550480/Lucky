@@ -74,6 +74,10 @@ class LLMUsageTracker(BaseCallbackHandler):
             name = serialized.get("name")
         if not name:
             name = kwargs.get("name")
+        # step 1.5: LangGraph 场景优先取节点名 —— metadata 携带 langgraph_node（如 "generate_sql"），
+        # 比 LCEL 包装层的注册名（RunnableSequence）更贴近 03 报告的"环节"语义
+        if metadata and metadata.get("langgraph_node"):
+            name = metadata["langgraph_node"]
         # step 2: 血缘登记对所有 run 生效 —— 匿名 LCEL 中间层若不登记父链接，
         # _nearest_chain_name 的上溯会在匿名层断链（验证中抓到的真 bug）；
         # 名字登记仅对有名字的 run 生效

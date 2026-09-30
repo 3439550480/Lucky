@@ -84,14 +84,19 @@ class QueryService:
             value_es_repository=self.value_es_repository,
             meta_mysql_repository=self.meta_mysql_repository,
             dw_mysql_repository=self.dw_mysql_repository,
-            llm=create_llm(provider_name, usage_tracker=tracker),   # [01] 按请求实例化
+            llm=create_llm(provider_name),   # [01] 按请求实例化（tracker 不挂实例——见下方 config 注释）
             capability_holder=holder,
             capability_registry=registry,
             usage_tracker=tracker,
         )
         try:
             # stream_mode="custom" 对应节点内部 writer(...) 写出的进度消息
+            # tracker 经 run config 挂载（01 §7.1 预留方案）：实例级 callback 只能收到 LLM 层事件，
+            # 环节归属（by_stage）依赖的 on_chain_start 节点层事件只有 run config 的 callbacks 能触达。
+            # 注意不能两处同时挂——同一 tracker 会把每次调用记两次
             config = {"configurable": {"thread_id": thread_id}}
+            if tracker:
+                config["callbacks"] = [tracker]
             async for chunk in graph.astream(
                 input=state,
                 context=context,

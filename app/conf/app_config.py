@@ -173,18 +173,40 @@ class AppConfig:
 # 从当前文件位置（app/conf/app_config.py）向上两级到项目根目录，然后进入 conf
 config_file = Path(__file__).resolve().parents[2] / "conf" / "app_config.yaml"
 
+# ====== .env 加载（唯一的环境变量来源）======
+# 约定：配置中的 ${VAR} 统一只从项目根目录 .env 文件取值，
+# Windows 系统/用户环境变量不再参与（避免"key 到底存在哪"的分裂状态）。
+# .env 已被 .gitignore 排除，真实密钥不会进仓库；仓库内提供占位符版供参照。
+
+def _load_dotenv(path: Path) -> dict[str, str]:
+    """解析 .env 文件 → dict。容错：文件不存在返回空 dict（启动不阻断，
+    缺失的 key 由下方 replace_env_var 转成 __MISSING_ENV_ 标记，create_llm 给出明确报错）；
+    跳过空行/注释行/无 = 的行；KEY=VALUE 两侧空白剔除；值不支持引号包裹（保持简单）"""
+    vars_: dict[str, str] = {}
+    if not path.is_file():
+        return vars_
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        vars_[key.strip()] = value.strip()
+    return vars_
+
+dotenv_vars: dict[str, str] = _load_dotenv(config_file.parent.parent / ".env")
+
 # 先读取 YAML 文件原始内容
 with open(config_file, "r", encoding="utf-8") as f:
     raw_yaml = f.read()
 
-# 手动替换 ${VAR_NAME} 为环境变量的值
+# 手动替换 ${VAR_NAME} 为 .env 中的值（唯一来源）
 def replace_env_var(match):
     var_name = match.group(1)
-    value = os.environ.get(var_name)
+    value = dotenv_vars.get(var_name)
     if value is None:
-        # 环境变量缺失时【不能】保留 ${VAR} 原样：OmegaConf 会把 ${...} 当作内部插值语法
+        # .env 缺失该 key 时【不能】保留 ${VAR} 原样：OmegaConf 会把 ${...} 当作内部插值语法
         # 去配置树解析，找不到直接抛 InterpolationKeyError。
-        # 改用无害标记占位，create_llm 检测到标记时给出"请设置环境变量 X"的明确报错
+        # 改用无害标记占位，create_llm 检测到标记时给出"请在 .env 中设置 X"的明确报错
         return f"__MISSING_ENV_{var_name}__"
     return value
 

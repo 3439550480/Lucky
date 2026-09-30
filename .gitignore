@@ -29,3 +29,7 @@ temp_files.txt
 
 # Node / 前端
 node_modules/
+
+# 评测报告产物（数据集与代码入库，报告不入库）
+evaluation/reports/*
+!evaluation/reports/.gitkeep
