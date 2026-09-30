@@ -42,11 +42,11 @@
 tables:
   - name: dim_region
     role: dim
-    description: 地区维度表，用于描述订单发生的地理区域信息。
+    description: 地区维度表。注意表的行粒度是省级：一行 = 一个省（region_id 主键），region_name 是大区标签（如华东由浙江/上海/江苏/福建/山东/安徽等多个省的 region_id 共享）。按大区/地区统计时必须只按 region_name 分组，禁止把 region_id 加入 GROUP BY（否则大区被碎片化，排名/最值类查询会得到错误结果）。
     columns:
       - name: region_id
         role: primary_key
-        description: 地区唯一标识。
+        description: 省级地区唯一标识（一行 = 一个省）。注意：一个 region_name（大区）对应多个 region_id，按大区聚合统计时禁止对 region_id 分组。
         alias: [地区ID, 区域ID]
         sync: false
 
@@ -58,7 +58,7 @@ tables:
 
       - name: region_name
         role: dimension
-        description: 订单所属的大区名称，如华东、华南等。
+        description: 大区名称（华东/华南/华北/华中/西南/西北/东北）。一个大区由多个省的 region_id 组成——用户说的"地区"就是此列；按地区/大区统计时只能按此列 GROUP BY，不要把 region_id 加入分组。
         alias: [地区, 区域, 大区]
         sync: true
 

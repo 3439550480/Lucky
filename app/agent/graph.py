@@ -33,6 +33,7 @@ from app.agent.nodes.run_sql import run_sql
 from app.agent.nodes.validate_sql import validate_sql
 from app.agent.state import DataAgentState
 from app.clients.embedding_client_manager import embedding_client_manager
+from app.conf.app_config import app_config
 from app.clients.es_client_manager import es_client_manager
 from app.clients.mysql_client_manager import (
     meta_mysql_client_manager, dw_mysql_client_manager,
