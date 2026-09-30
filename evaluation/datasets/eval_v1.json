@@ -1,7 +1,7 @@
 {
   "dataset_id": "eval_v1",
-  "version": "1.0",
-  "description": "电商问数评测集 v1（标注口径：columns 用 meta.column_info.id 全名；metrics 用 metric_info.name；values 用 ES 已索引的真实取值）",
+  "version": "1.1",
+  "description": "电商问数评测集 v1.1（50 用例：40 问数 + 10 default）。标注口径：columns=meta.column_info.id 全名；metrics=metric_info.name；values=ES 已索引真实取值。情景覆盖：时间粒度（年/季/月/日）、地区/客户/商品维度、分组排行、TopN、组合条件、派生指标、空结果风险、default 兜底与数字词干扰例。",
   "defaults": {
     "match_mode": "exact",
     "k": 5
@@ -13,11 +13,26 @@
       "query": "华北地区2025年第一季度的GMV是多少",
       "expected": {
         "intent": "dataquery",
-        "tools": ["dataquery.search"],
-        "columns": ["dim_region.region_name", "fact_order.order_amount", "dim_date.quarter"],
-        "metrics": ["GMV"],
-        "values": ["华北"],
-        "tables": ["fact_order", "dim_region", "dim_date"]
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_region.region_name",
+          "fact_order.order_amount",
+          "dim_date.quarter"
+        ],
+        "metrics": [
+          "GMV"
+        ],
+        "values": [
+          "华北",
+          "Q1"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_region",
+          "dim_date"
+        ]
       },
       "golden_sql": "SELECT SUM(fo.order_amount) AS gmv FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dr.region_name = '华北' AND dd.year = 2025 AND dd.quarter = 'Q1'"
     },
@@ -27,52 +42,927 @@
       "query": "2025年全年的总订单数是多少",
       "expected": {
         "intent": "dataquery",
-        "tools": ["dataquery.search"],
-        "columns": ["fact_order.order_id", "dim_date.year"],
-        "metrics": ["Total Orders"],
-        "tables": ["fact_order", "dim_date"]
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "fact_order.order_id",
+          "dim_date.year"
+        ],
+        "metrics": [
+          "Total Orders"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_date"
+        ]
       },
       "golden_sql": "SELECT COUNT(DISTINCT fo.order_id) AS total_orders FROM fact_order fo JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dd.year = 2025"
     },
     {
-      "id": "dq_sales_by_region",
+      "id": "dq_sales_month_3",
       "enabled": true,
-      "query": "查询各地区的销售额排行",
+      "query": "2025年3月的销售额是多少",
       "expected": {
         "intent": "dataquery",
-        "tools": ["dataquery.search"],
-        "columns": ["dim_region.region_name", "fact_order.order_amount"],
-        "values": ["华东", "华北"],
-        "tables": ["fact_order", "dim_region"]
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "fact_order.order_amount",
+          "dim_date.month",
+          "dim_date.year"
+        ],
+        "metrics": [
+          "GMV"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_date"
+        ]
       },
-      "golden_sql": "SELECT dr.region_name AS region_name, SUM(fo.order_amount) AS sales FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id GROUP BY dr.region_name ORDER BY sales DESC"
+      "golden_sql": "SELECT SUM(fo.order_amount) AS sales FROM fact_order fo JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dd.year = 2025 AND dd.month = 3"
     },
     {
-      "id": "dq_aov_golden_member",
+      "id": "dq_quantity_q2",
       "enabled": true,
-      "query": "黄金会员的平均订单金额是多少",
+      "query": "统计2025年第二季度的总销量",
       "expected": {
         "intent": "dataquery",
-        "tools": ["dataquery.search"],
-        "columns": ["dim_customer.member_level", "fact_order.order_amount"],
-        "metrics": ["AOV"],
-        "values": ["黄金"],
-        "tables": ["fact_order", "dim_customer"]
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "fact_order.order_quantity",
+          "dim_date.quarter"
+        ],
+        "values": [
+          "Q2"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_date"
+        ]
       },
-      "golden_sql": "SELECT AVG(fo.order_amount) AS aov FROM fact_order fo JOIN dim_customer dc ON fo.customer_id = dc.customer_id WHERE dc.member_level = '黄金'"
+      "golden_sql": "SELECT SUM(fo.order_quantity) AS total_quantity FROM fact_order fo JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dd.year = 2025 AND dd.quarter = 'Q2'"
     },
     {
-      "id": "dq_quantity_brand_year",
+      "id": "dq_orders_specific_day",
+      "enabled": true,
+      "query": "2025年5月15日当天有多少订单",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "fact_order.order_id",
+          "dim_date.date_id"
+        ],
+        "metrics": [
+          "Total Orders"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_date"
+        ]
+      },
+      "golden_sql": "SELECT COUNT(DISTINCT fo.order_id) AS orders FROM fact_order fo WHERE fo.date_id = 20250515"
+    },
+    {
+      "id": "dq_aov_year",
+      "enabled": true,
+      "query": "2025年的平均订单金额是多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "fact_order.order_amount",
+          "dim_date.year"
+        ],
+        "metrics": [
+          "AOV"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_date"
+        ]
+      },
+      "golden_sql": "SELECT AVG(fo.order_amount) AS aov FROM fact_order fo JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dd.year = 2025"
+    },
+    {
+      "id": "dq_min_order_amount",
+      "enabled": true,
+      "query": "查一下最小的单笔订单金额",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "fact_order.order_amount"
+        ],
+        "tables": [
+          "fact_order"
+        ]
+      },
+      "golden_sql": "SELECT MIN(fo.order_amount) AS min_amount FROM fact_order fo"
+    },
+    {
+      "id": "dq_sales_east_year",
+      "enabled": true,
+      "query": "华东地区2025年的销售额是多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_region.region_name",
+          "fact_order.order_amount",
+          "dim_date.year"
+        ],
+        "metrics": [
+          "GMV"
+        ],
+        "values": [
+          "华东"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_region"
+        ]
+      },
+      "golden_sql": "SELECT SUM(fo.order_amount) AS sales FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id WHERE dr.region_name = '华东' AND fo.date_id BETWEEN 20250101 AND 20251231"
+    },
+    {
+      "id": "dq_orders_northeast_q3",
+      "enabled": true,
+      "query": "东北地区2025年第三季度的订单量有多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_region.region_name",
+          "fact_order.order_id",
+          "dim_date.quarter"
+        ],
+        "metrics": [
+          "Total Orders"
+        ],
+        "values": [
+          "东北",
+          "Q3"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_region",
+          "dim_date"
+        ]
+      },
+      "golden_sql": "SELECT COUNT(DISTINCT fo.order_id) AS orders FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dr.region_name = '东北' AND dd.quarter = 'Q3'"
+    },
+    {
+      "id": "dq_orders_guangdong",
+      "enabled": true,
+      "query": "广东省的订单总数是多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_region.province",
+          "fact_order.order_id"
+        ],
+        "metrics": [
+          "Total Orders"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_region"
+        ]
+      },
+      "golden_sql": "SELECT COUNT(DISTINCT fo.order_id) AS orders FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id WHERE dr.province = '广东省'"
+    },
+    {
+      "id": "dq_sales_southwest_by_quarter",
+      "enabled": true,
+      "query": "西南地区2025年各季度的销售额",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_region.region_name",
+          "fact_order.order_amount",
+          "dim_date.quarter"
+        ],
+        "values": [
+          "西南"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_region",
+          "dim_date"
+        ]
+      },
+      "golden_sql": "SELECT dd.quarter AS quarter, SUM(fo.order_amount) AS sales FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dr.region_name = '西南' GROUP BY dd.quarter ORDER BY dd.quarter"
+    },
+    {
+      "id": "dq_gmv_north_vs_east",
+      "enabled": true,
+      "query": "华北和华东2025年的GMV分别是多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_region.region_name",
+          "fact_order.order_amount"
+        ],
+        "metrics": [
+          "GMV"
+        ],
+        "values": [
+          "华北",
+          "华东"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_region"
+        ]
+      },
+      "golden_sql": "SELECT dr.region_name AS region_name, SUM(fo.order_amount) AS gmv FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id WHERE dr.region_name IN ('华北', '华东') GROUP BY dr.region_name"
+    },
+    {
+      "id": "dq_spend_golden_member",
+      "enabled": true,
+      "query": "黄金会员2025年的总消费金额是多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_customer.member_level",
+          "fact_order.order_amount"
+        ],
+        "metrics": [
+          "GMV"
+        ],
+        "values": [
+          "黄金"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_customer"
+        ]
+      },
+      "golden_sql": "SELECT SUM(fo.order_amount) AS spend FROM fact_order fo JOIN dim_customer dc ON fo.customer_id = dc.customer_id WHERE dc.member_level = '黄金'"
+    },
+    {
+      "id": "dq_orders_female",
+      "enabled": true,
+      "query": "女性客户的订单数有多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_customer.gender",
+          "fact_order.order_id"
+        ],
+        "metrics": [
+          "Total Orders"
+        ],
+        "values": [
+          "女"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_customer"
+        ]
+      },
+      "golden_sql": "SELECT COUNT(DISTINCT fo.order_id) AS orders FROM fact_order fo JOIN dim_customer dc ON fo.customer_id = dc.customer_id WHERE dc.gender = '女'"
+    },
+    {
+      "id": "dq_aov_silver",
+      "enabled": true,
+      "query": "白银会员的平均订单金额",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_customer.member_level",
+          "fact_order.order_amount"
+        ],
+        "metrics": [
+          "AOV"
+        ],
+        "values": [
+          "白银"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_customer"
+        ]
+      },
+      "golden_sql": "SELECT AVG(fo.order_amount) AS aov FROM fact_order fo JOIN dim_customer dc ON fo.customer_id = dc.customer_id WHERE dc.member_level = '白银'"
+    },
+    {
+      "id": "dq_orders_by_member_level",
+      "enabled": true,
+      "query": "各会员等级的订单数排行",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_customer.member_level",
+          "fact_order.order_id"
+        ],
+        "metrics": [
+          "Total Orders"
+        ],
+        "values": [
+          "黄金",
+          "白银"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_customer"
+        ]
+      },
+      "golden_sql": "SELECT dc.member_level AS member_level, COUNT(DISTINCT fo.order_id) AS orders FROM fact_order fo JOIN dim_customer dc ON fo.customer_id = dc.customer_id GROUP BY dc.member_level ORDER BY orders DESC"
+    },
+    {
+      "id": "dq_spend_platinum_q1",
+      "enabled": true,
+      "query": "铂金会员2025年第一季度的消费总额",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_customer.member_level",
+          "fact_order.order_amount",
+          "dim_date.quarter"
+        ],
+        "values": [
+          "铂金",
+          "Q1"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_customer",
+          "dim_date"
+        ]
+      },
+      "golden_sql": "SELECT SUM(fo.order_amount) AS spend FROM fact_order fo JOIN dim_customer dc ON fo.customer_id = dc.customer_id JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dc.member_level = '铂金' AND dd.quarter = 'Q1'"
+    },
+    {
+      "id": "dq_quantity_apple_year",
       "enabled": true,
       "query": "苹果品牌2025年的总销量是多少",
       "expected": {
         "intent": "dataquery",
-        "tools": ["dataquery.search"],
-        "columns": ["dim_product.brand", "fact_order.order_quantity"],
-        "values": ["苹果"],
-        "tables": ["fact_order", "dim_product"]
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_product.brand",
+          "fact_order.order_quantity"
+        ],
+        "values": [
+          "苹果"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_product"
+        ]
       },
-      "golden_sql": "SELECT SUM(fo.order_quantity) AS total_quantity FROM fact_order fo JOIN dim_product dp ON fo.product_id = dp.product_id JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dp.brand = '苹果' AND dd.year = 2025"
+      "golden_sql": "SELECT SUM(fo.order_quantity) AS total_quantity FROM fact_order fo JOIN dim_product dp ON fo.product_id = dp.product_id WHERE dp.brand = '苹果'"
+    },
+    {
+      "id": "dq_sales_digital_category",
+      "enabled": true,
+      "query": "手机数码品类2025年的销售额",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_product.category",
+          "fact_order.order_amount"
+        ],
+        "metrics": [
+          "GMV"
+        ],
+        "values": [
+          "手机数码"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_product"
+        ]
+      },
+      "golden_sql": "SELECT SUM(fo.order_amount) AS sales FROM fact_order fo JOIN dim_product dp ON fo.product_id = dp.product_id WHERE dp.category = '手机数码'"
+    },
+    {
+      "id": "dq_quantity_by_category",
+      "enabled": true,
+      "query": "各品类的销量排行",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_product.category",
+          "fact_order.order_quantity"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_product"
+        ]
+      },
+      "golden_sql": "SELECT dp.category AS category, SUM(fo.order_quantity) AS quantity FROM fact_order fo JOIN dim_product dp ON fo.product_id = dp.product_id GROUP BY dp.category ORDER BY quantity DESC"
+    },
+    {
+      "id": "dq_aov_haier",
+      "enabled": true,
+      "query": "海尔品牌的平均订单金额是多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_product.brand",
+          "fact_order.order_amount"
+        ],
+        "metrics": [
+          "AOV"
+        ],
+        "values": [
+          "海尔"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_product"
+        ]
+      },
+      "golden_sql": "SELECT AVG(fo.order_amount) AS aov FROM fact_order fo JOIN dim_product dp ON fo.product_id = dp.product_id WHERE dp.brand = '海尔'"
+    },
+    {
+      "id": "dq_top5_brand_sales",
+      "enabled": true,
+      "query": "销售额排名前5的品牌有哪些",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_product.brand",
+          "fact_order.order_amount"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_product"
+        ]
+      },
+      "golden_sql": "SELECT dp.brand AS brand, SUM(fo.order_amount) AS sales FROM fact_order fo JOIN dim_product dp ON fo.product_id = dp.product_id GROUP BY dp.brand ORDER BY sales DESC LIMIT 5"
+    },
+    {
+      "id": "dq_orders_beauty_q2",
+      "enabled": true,
+      "query": "美妆个护品类2025年第二季度的订单量",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_product.category",
+          "fact_order.order_id",
+          "dim_date.quarter"
+        ],
+        "metrics": [
+          "Total Orders"
+        ],
+        "values": [
+          "美妆个护",
+          "Q2"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_product",
+          "dim_date"
+        ]
+      },
+      "golden_sql": "SELECT COUNT(DISTINCT fo.order_id) AS orders FROM fact_order fo JOIN dim_product dp ON fo.product_id = dp.product_id JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dp.category = '美妆个护' AND dd.quarter = 'Q2'"
+    },
+    {
+      "id": "dq_orders_by_month",
+      "enabled": true,
+      "query": "2025年每个月的订单数趋势",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "fact_order.order_id",
+          "dim_date.month"
+        ],
+        "metrics": [
+          "Total Orders"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_date"
+        ]
+      },
+      "golden_sql": "SELECT dd.month AS month, COUNT(DISTINCT fo.order_id) AS orders FROM fact_order fo JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dd.year = 2025 GROUP BY dd.month ORDER BY dd.month"
+    },
+    {
+      "id": "dq_sales_by_quarter",
+      "enabled": true,
+      "query": "每个季度的销售额是多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "fact_order.order_amount",
+          "dim_date.quarter"
+        ],
+        "values": [
+          "Q1",
+          "Q2"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_date"
+        ]
+      },
+      "golden_sql": "SELECT dd.quarter AS quarter, SUM(fo.order_amount) AS sales FROM fact_order fo JOIN dim_date dd ON fo.date_id = dd.date_id GROUP BY dd.quarter ORDER BY dd.quarter"
+    },
+    {
+      "id": "dq_top5_product_quantity",
+      "enabled": true,
+      "query": "销量最高的5个商品是哪些",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_product.product_name",
+          "fact_order.order_quantity"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_product"
+        ]
+      },
+      "golden_sql": "SELECT dp.product_name AS product_name, SUM(fo.order_quantity) AS quantity FROM fact_order fo JOIN dim_product dp ON fo.product_id = dp.product_id GROUP BY dp.product_name ORDER BY quantity DESC LIMIT 5"
+    },
+    {
+      "id": "dq_bottom3_region_sales",
+      "enabled": true,
+      "query": "销售额最低的3个地区",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_region.region_name",
+          "fact_order.order_amount"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_region"
+        ]
+      },
+      "golden_sql": "SELECT dr.region_name AS region_name, SUM(fo.order_amount) AS sales FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id GROUP BY dr.region_name ORDER BY sales ASC LIMIT 3"
+    },
+    {
+      "id": "dq_orders_female_east",
+      "enabled": true,
+      "query": "华东地区女性客户2025年的订单数",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_customer.gender",
+          "dim_region.region_name",
+          "fact_order.order_id"
+        ],
+        "values": [
+          "女",
+          "华东"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_customer",
+          "dim_region"
+        ]
+      },
+      "golden_sql": "SELECT COUNT(DISTINCT fo.order_id) AS orders FROM fact_order fo JOIN dim_customer dc ON fo.customer_id = dc.customer_id JOIN dim_region dr ON fo.region_id = dr.region_id WHERE dc.gender = '女' AND dr.region_name = '华东'"
+    },
+    {
+      "id": "dq_spend_golden_digital",
+      "enabled": true,
+      "query": "黄金会员在手机数码品类的消费金额",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_customer.member_level",
+          "dim_product.category",
+          "fact_order.order_amount"
+        ],
+        "values": [
+          "黄金",
+          "手机数码"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_customer",
+          "dim_product"
+        ]
+      },
+      "golden_sql": "SELECT SUM(fo.order_amount) AS spend FROM fact_order fo JOIN dim_customer dc ON fo.customer_id = dc.customer_id JOIN dim_product dp ON fo.product_id = dp.product_id WHERE dc.member_level = '黄金' AND dp.category = '手机数码'"
+    },
+    {
+      "id": "dq_quantity_north_q4_by_category",
+      "enabled": true,
+      "query": "2025年第四季度华北地区各品类的销量",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_region.region_name",
+          "dim_product.category",
+          "fact_order.order_quantity",
+          "dim_date.quarter"
+        ],
+        "values": [
+          "华北",
+          "Q4"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_region",
+          "dim_product",
+          "dim_date"
+        ]
+      },
+      "golden_sql": "SELECT dp.category AS category, SUM(fo.order_quantity) AS quantity FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id JOIN dim_product dp ON fo.product_id = dp.product_id JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dr.region_name = '华北' AND dd.quarter = 'Q4' GROUP BY dp.category ORDER BY quantity DESC"
+    },
+    {
+      "id": "dq_sales_nike_east",
+      "enabled": true,
+      "query": "耐克品牌在华东地区的销售额",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_product.brand",
+          "dim_region.region_name",
+          "fact_order.order_amount"
+        ],
+        "values": [
+          "耐克",
+          "华东"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_product",
+          "dim_region"
+        ]
+      },
+      "golden_sql": "SELECT SUM(fo.order_amount) AS sales FROM fact_order fo JOIN dim_product dp ON fo.product_id = dp.product_id JOIN dim_region dr ON fo.region_id = dr.region_id WHERE dp.brand = '耐克' AND dr.region_name = '华东'"
+    },
+    {
+      "id": "dq_aov_derived_year",
+      "enabled": true,
+      "query": "2025年的客单价是多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "fact_order.order_amount",
+          "fact_order.order_id"
+        ],
+        "metrics": [
+          "AOV"
+        ],
+        "tables": [
+          "fact_order"
+        ]
+      },
+      "golden_sql": "SELECT SUM(fo.order_amount) / COUNT(DISTINCT fo.order_id) AS aov FROM fact_order fo"
+    },
+    {
+      "id": "dq_items_per_order",
+      "enabled": true,
+      "query": "平均每个订单包含多少件商品",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "fact_order.order_quantity",
+          "fact_order.order_id"
+        ],
+        "metrics": [
+          "Average Items Per Order"
+        ],
+        "tables": [
+          "fact_order"
+        ]
+      },
+      "golden_sql": "SELECT SUM(fo.order_quantity) / COUNT(DISTINCT fo.order_id) AS items_per_order FROM fact_order fo"
+    },
+    {
+      "id": "dq_repeat_purchase_rate",
+      "enabled": true,
+      "query": "2025年的复购率是多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "fact_order.customer_id",
+          "dim_date.year"
+        ],
+        "metrics": [
+          "Repeat Purchase Rate"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_date"
+        ]
+      }
+    },
+    {
+      "id": "dq_gmv_top_region",
+      "enabled": true,
+      "query": "GMV最高的地区是哪个",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_region.region_name",
+          "fact_order.order_amount"
+        ],
+        "metrics": [
+          "GMV"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_region"
+        ]
+      },
+      "golden_sql": "SELECT dr.region_name AS region_name, SUM(fo.order_amount) AS gmv FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id GROUP BY dr.region_name ORDER BY gmv DESC LIMIT 1"
+    },
+    {
+      "id": "dq_lowest_aov_member_level",
+      "enabled": true,
+      "query": "客单价最低的会员等级是哪个",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_customer.member_level",
+          "fact_order.order_amount"
+        ],
+        "metrics": [
+          "AOV"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_customer"
+        ]
+      },
+      "golden_sql": "SELECT dc.member_level AS member_level, AVG(fo.order_amount) AS aov FROM fact_order fo JOIN dim_customer dc ON fo.customer_id = dc.customer_id GROUP BY dc.member_level ORDER BY aov ASC LIMIT 1"
+    },
+    {
+      "id": "dq_nonexistent_brand",
+      "enabled": true,
+      "query": "字节跳动品牌2025年的销售额",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_product.brand",
+          "fact_order.order_amount"
+        ]
+      },
+      "golden_sql": "SELECT SUM(fo.order_amount) AS sales FROM fact_order fo JOIN dim_product dp ON fo.product_id = dp.product_id WHERE dp.brand = '字节跳动'"
+    },
+    {
+      "id": "dq_hunan_orders",
+      "enabled": true,
+      "query": "湖南省2025年有多少订单",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_region.province",
+          "fact_order.order_id"
+        ],
+        "metrics": [
+          "Total Orders"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_region"
+        ]
+      },
+      "golden_sql": "SELECT COUNT(DISTINCT fo.order_id) AS orders FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id WHERE dr.province = '湖南省'"
+    },
+    {
+      "id": "dq_books_sales",
+      "enabled": true,
+      "query": "图书音像品类卖了多少钱",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "dim_product.category",
+          "fact_order.order_amount"
+        ],
+        "metrics": [
+          "GMV"
+        ],
+        "values": [
+          "图书音像"
+        ],
+        "tables": [
+          "fact_order",
+          "dim_product"
+        ]
+      },
+      "golden_sql": "SELECT SUM(fo.order_amount) AS sales FROM fact_order fo JOIN dim_product dp ON fo.product_id = dp.product_id WHERE dp.category = '图书音像'"
+    },
+    {
+      "id": "dq_distinct_customers",
+      "enabled": true,
+      "query": "一共有多少个客户下过单",
+      "expected": {
+        "intent": "dataquery",
+        "tools": [
+          "dataquery.search"
+        ],
+        "columns": [
+          "fact_order.customer_id"
+        ],
+        "tables": [
+          "fact_order"
+        ]
+      },
+      "golden_sql": "SELECT COUNT(DISTINCT fo.customer_id) AS customers FROM fact_order fo"
     },
     {
       "id": "chat_greeting",
@@ -87,6 +977,78 @@
       "id": "chat_help",
       "enabled": true,
       "query": "你能帮我做什么？",
+      "expected": {
+        "intent": "default",
+        "tools": []
+      }
+    },
+    {
+      "id": "chat_thanks",
+      "enabled": true,
+      "query": "谢谢你，帮了大忙",
+      "expected": {
+        "intent": "default",
+        "tools": []
+      }
+    },
+    {
+      "id": "chat_identity",
+      "enabled": true,
+      "query": "你是谁呀",
+      "expected": {
+        "intent": "default",
+        "tools": []
+      }
+    },
+    {
+      "id": "chat_weather",
+      "enabled": true,
+      "query": "今天天气怎么样",
+      "expected": {
+        "intent": "default",
+        "tools": []
+      }
+    },
+    {
+      "id": "chat_write_poem",
+      "enabled": true,
+      "query": "帮我写一首关于秋天的诗",
+      "expected": {
+        "intent": "default",
+        "tools": []
+      }
+    },
+    {
+      "id": "chat_age_trap",
+      "enabled": true,
+      "query": "你今年多少岁了",
+      "expected": {
+        "intent": "default",
+        "tools": []
+      }
+    },
+    {
+      "id": "chat_joke",
+      "enabled": true,
+      "query": "讲个笑话听听",
+      "expected": {
+        "intent": "default",
+        "tools": []
+      }
+    },
+    {
+      "id": "chat_about_you",
+      "enabled": true,
+      "query": "给我介绍一下你自己吧",
+      "expected": {
+        "intent": "default",
+        "tools": []
+      }
+    },
+    {
+      "id": "chat_bye",
+      "enabled": true,
+      "query": "我们下次再聊，拜拜",
       "expected": {
         "intent": "default",
         "tools": []
