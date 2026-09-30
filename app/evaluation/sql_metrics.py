@@ -1,10 +1,12 @@
 """
-SQL 指标（03 文档 §3.3）
+SQL 指标（03 文档 §3.3，v1.1 口径）
 
 可执行率 = run() 成功用例 / 全部 enabled 且走完链路的用例
-结果集正确性（仅 golden_sql 用例）：列名集合相等 + 行多重集相等；
-行内值归一化——Decimal/float 按 round(4) 比较、datetime/date 统一 isoformat()、其余 str()；
-行序无关、列按名对齐（v1 口径，报告注明）
+结果集正确性（仅 golden_sql 用例）：行多重集相等，**忽略列名与列序**——
+行签名 = 行内值归一化后排序的元组（LLM 生成 SQL 的列别名不可控，
+首版"列名集合相等+按列名对齐"导致正确性恒为 0，2026-09-30 修订）；
+值归一化——Decimal/float 按 round(4) 比较、datetime/date 统一 isoformat()、其余 str()；
+行序无关；空结果集视为等价。报告注明口径
 """
 from collections import Counter
 from datetime import date, datetime
@@ -24,23 +26,21 @@ def _normalize_cell(v) -> str:
     return str(v)
 
 
-def _result_multiset(rows: list[dict] | None) -> tuple[set[str], Counter]:
-    """结果集 → (列名集合, 行多重集)。行 = 列名对齐后的归一化值元组（行序无关）"""
-    if not rows:                                 # None 与空列表同义：空结果集（两空 = 等价语义 §3.3）
-        return set(), Counter()
-    columns = set(rows[0].keys())
-    bag = Counter(
-        tuple(_normalize_cell(row.get(c)) for c in sorted(columns))
+def _result_multiset(rows: list[dict] | None) -> Counter:
+    """结果集 → 行签名多重集。
+    行签名 = 行内值归一化后排序的元组（忽略列名与列序，v1.1 口径）；
+    None 与空列表同义：空结果集（两空 = 等价语义 §3.3）"""
+    if not rows:
+        return Counter()
+    return Counter(
+        tuple(sorted(_normalize_cell(v) for v in row.values()))
         for row in rows
     )
-    return columns, bag
 
 
 def results_equal(golden_rows: list[dict] | None, actual_rows: list[dict] | None) -> bool:
-    """结果集相等判定：列名集合相等 + 行多重集相等"""
-    gc, gb = _result_multiset(golden_rows)
-    ac, ab = _result_multiset(actual_rows)
-    return gc == ac and gb == ab
+    """结果集相等判定：行签名多重集相等（忽略列名/列序/行序，§3.3 v1.1）"""
+    return _result_multiset(golden_rows) == _result_multiset(actual_rows)
 
 
 def compute_sql_metrics(cases: list[dict]) -> dict:

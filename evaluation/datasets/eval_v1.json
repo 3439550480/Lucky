@@ -1,27 +1,96 @@
 {
   "dataset_id": "eval_v1",
   "version": "1.0",
-  "description": "电商问数评测集（骨架，样例待填充）",
+  "description": "电商问数评测集 v1（标注口径：columns 用 meta.column_info.id 全名；metrics 用 metric_info.name；values 用 ES 已索引的真实取值）",
   "defaults": {
     "match_mode": "exact",
     "k": 5
   },
   "cases": [
     {
-      "id": "case_001_format_example",
-      "enabled": false,
-      "query": "上个月华北地区的GMV是多少",
-      "capability": "dataquery",
+      "id": "dq_gmv_region_quarter",
+      "enabled": true,
+      "query": "华北地区2025年第一季度的GMV是多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "columns": ["dim_region.region_name", "fact_order.order_amount", "dim_date.quarter"],
+        "metrics": ["GMV"],
+        "values": ["华北"],
+        "tables": ["fact_order", "dim_region", "dim_date"]
+      },
+      "golden_sql": "SELECT SUM(fo.order_amount) AS gmv FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dr.region_name = '华北' AND dd.year = 2025 AND dd.quarter = 'Q1'"
+    },
+    {
+      "id": "dq_total_orders_year",
+      "enabled": true,
+      "query": "2025年全年的总订单数是多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "columns": ["fact_order.order_id", "dim_date.year"],
+        "metrics": ["Total Orders"],
+        "tables": ["fact_order", "dim_date"]
+      },
+      "golden_sql": "SELECT COUNT(DISTINCT fo.order_id) AS total_orders FROM fact_order fo JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dd.year = 2025"
+    },
+    {
+      "id": "dq_sales_by_region",
+      "enabled": true,
+      "query": "查询各地区的销售额排行",
       "expected": {
         "intent": "dataquery",
         "tools": ["dataquery.search"],
         "columns": ["dim_region.region_name", "fact_order.order_amount"],
-        "metrics": ["GMV"],
-        "values": ["华北"],
+        "values": ["华东", "华北"],
         "tables": ["fact_order", "dim_region"]
       },
-      "golden_sql": "SELECT SUM(fo.order_amount) AS gmv FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id WHERE dr.region_name = '华北' AND fo.date_id BETWEEN 20250201 AND 20250228",
-      "notes": "格式示例：enabled=false 时 runner 跳过；填充真实用例后可删除本条"
+      "golden_sql": "SELECT dr.region_name AS region_name, SUM(fo.order_amount) AS sales FROM fact_order fo JOIN dim_region dr ON fo.region_id = dr.region_id GROUP BY dr.region_name ORDER BY sales DESC"
+    },
+    {
+      "id": "dq_aov_golden_member",
+      "enabled": true,
+      "query": "黄金会员的平均订单金额是多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "columns": ["dim_customer.member_level", "fact_order.order_amount"],
+        "metrics": ["AOV"],
+        "values": ["黄金"],
+        "tables": ["fact_order", "dim_customer"]
+      },
+      "golden_sql": "SELECT AVG(fo.order_amount) AS aov FROM fact_order fo JOIN dim_customer dc ON fo.customer_id = dc.customer_id WHERE dc.member_level = '黄金'"
+    },
+    {
+      "id": "dq_quantity_brand_year",
+      "enabled": true,
+      "query": "苹果品牌2025年的总销量是多少",
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "columns": ["dim_product.brand", "fact_order.order_quantity"],
+        "values": ["苹果"],
+        "tables": ["fact_order", "dim_product"]
+      },
+      "golden_sql": "SELECT SUM(fo.order_quantity) AS total_quantity FROM fact_order fo JOIN dim_product dp ON fo.product_id = dp.product_id JOIN dim_date dd ON fo.date_id = dd.date_id WHERE dp.brand = '苹果' AND dd.year = 2025"
+    },
+    {
+      "id": "chat_greeting",
+      "enabled": true,
+      "query": "你好呀",
+      "expected": {
+        "intent": "default",
+        "tools": []
+      }
+    },
+    {
+      "id": "chat_help",
+      "enabled": true,
+      "query": "你能帮我做什么？",
+      "expected": {
+        "intent": "default",
+        "tools": []
+      }
     }
   ]
 }

@@ -1,7 +1,7 @@
 # 03 · Agent 评估模块（M3）
 
 > 状态：`final`（已评审定稿）　|　上位文档：[00_overview.md](00_overview.md)（final）、[01_llm_factory.md](01_llm_factory.md)（final）
-> 修订记录：2026-09-21 初稿；同日定价口径修订——3 个物理模型，DeepSeek 峰谷为计费时段（`resolve_price_tier` 按调用时间自动判定，评测可 `--pricing-tier` 强制固定）；同日新增工具/能力触发指标（§3.9，skill+工具化预留）与评估子模块开关（`features.evaluation.*`）
+> 修订记录：2026-09-21 初稿；同日定价口径修订——3 个物理模型，DeepSeek 峰谷为计费时段（`resolve_price_tier` 按调用时间自动判定，评测可 `--pricing-tier` 强制固定）；同日新增工具/能力触发指标（§3.9，skill+工具化预留）与评估子模块开关（`features.evaluation.*`）；2026-09-30 §3.3 比较口径修订为 v1.1（忽略列名，行内值排序比较——首版列名对齐导致正确性恒 0）；§3.8 退出码 3 与验收标准 1 的冲突按验收标准 1 执行（全 disabled → 空报告 + 退出码 0）
 > 评估对象的数据结构已逐一核对：`DataAgentState`（retrieved_*/sql/error/result/intent）、`DWMySQLRepository.run()`（返回 `list[dict]`，自动 LIMIT 1000）。
 
 ---
@@ -180,7 +180,7 @@ def compute_sql_metrics(case_result: list[dict]) -> dict:
 - **可执行率** = `run()` 成功的用例数 / 全部 enabled 且走完链路的用例数
 - **结果集正确性**（仅有 `golden_sql` 的用例参与）：
   1. 分别执行 `golden_sql` 与 `state["sql"]`（均经 `DWMySQLRepository.run()`，受同样的 LIMIT 保护）
-  2. **比较规则（v1 口径，报告中注明）**：列名集合相等 + 行多重集相等；行内值归一化——`Decimal/float` 按 `round(x, 4)` 比较、`datetime/date` 统一 `isoformat()`、其余 `str()`；**行序无关、列序按列名对齐**
+  2. **比较规则（v1.1 口径，2026-09-30 修订，报告中注明）**：**忽略列名与列序，行多重集相等**——行签名 = 行内值归一化后排序的元组（LLM 生成 SQL 的列别名不可控，首版"列名集合相等 + 列按名对齐"导致正确性恒为 0，已废弃）；值归一化——`Decimal/float` 按 `round(x, 4)` 比较、`datetime/date` 统一 `isoformat()`、其余 `str()`；**行序无关**；两结果集均为空视为正确（等价语义）。已知取舍：多列结果存在"两列语义互换仍判对"的理论误判可能，v1 接受
   3. 两结果集均为空视为正确（等价语义）；行数上限受 run() 的 1000 行保护，超出时报告标注"截断"
 - **辅助统计**：平均重试次数（`retry_count`）、典型失败 SQL 摘录（每报告前 5 条 error）
 
@@ -412,7 +412,7 @@ uv run python -m app.scripts.run_evaluation -d evaluation/datasets/eval_v1.json 
 3. **指标正确性（单测级验证，编码时以 pytest 内联脚本验证后可删）**：
    - `hit_at_k(["a","b","c"], {"b"}, 3) == 1`；`mrr(["a","b"], {"b"}) == 0.5`
    - `precision_at_k(["a","x","b"], {"a","b"}, 3) == 2/3`；`recall_at_k(["a"], {"a","b"}, 5) == 0.5`
-   - 结果集比较：行序打乱 → 正确；列序不同按列名对齐 → 正确；`1.00001` vs `1.00002`（round 4）→ 正确；行数不同 → 不正确
+   - 结果集比较：行序打乱 → 正确；列序/别名不同（仅列名差异）→ 正确；`1.00001` vs `1.00002`（round 4）→ 正确；行数不同 → 不正确
 4. **真实用例端到端**（数据集填充 ≥3 条 enabled 用例后）：报告 quality 区出现非 null 的三通道指标、意图准确率、SQL 可执行率；cost 区出现费用（provider 有定价时）且 `by_stage` 含 `intent_classify`/`generate_sql` 环节
 5. **开关覆盖生效**：`--features memory.short_term=false` 后报告 meta 的 flags 快照中该值为 false；在线配置文件未被修改
 6. **对比报告**：`--compare` 两份报告输出对比表，行 = 实验标签，列 = §3.7 定义的关键指标
