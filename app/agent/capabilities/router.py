@@ -19,20 +19,12 @@ from langgraph.runtime import Runtime
 from app.agent.capabilities.registry import CapabilityRegistry
 from app.agent.context import DataAgentContext
 from app.agent.llm_factory import create_llm
+from app.agent.session.history_provider import get_conversation_history
+from app.agent.session.prefix import build_system_prefix
 from app.agent.state import DataAgentState
 from app.conf.app_config import app_config
 from app.core.log import logger
 from app.prompt.prompt_loader import load_prompt
-
-
-def _last_assistant_msg(state: DataAgentState) -> str:
-    """取最近一条助手消息（供分类提示词参考上下文）。
-    [05 接管] 此逻辑将由 history_provider 统一供给，届时此处删除"""
-    messages = state.get("messages", [])
-    for msg in reversed(messages):
-        if msg.get("role") == "assistant":
-            return msg.get("content", "")
-    return ""
 
 
 def _finish(writer, registry: CapabilityRegistry, holder,
@@ -96,15 +88,37 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
         # 分类专用 LLM 与生成模型解耦（classifier_provider），计入同一份 tracker
         classifier = create_llm(registry.classifier_provider,
                                 usage_tracker=runtime.context.get("usage_tracker"))
-        chain = PromptTemplate(
-            template=load_prompt("capability_route"),
-            input_variables=["capabilities", "query", "last_assistant_msg"],
-        ) | classifier | JsonOutputParser()
-        result = await chain.ainvoke({
-            "capabilities": registry.build_llm_context(),
-            "query": query,
-            "last_assistant_msg": _last_assistant_msg(state),
-        })
+        # [05 上下文管理] 开关二选一：新 = 三区模板（capabilities 进前缀，完整对话历史）；
+        # 旧 = legacy 模板（capabilities + last_assistant_msg 内联）
+        if app_config.features.context_management:
+            chain = PromptTemplate(
+                template=load_prompt("capability_route"),
+                input_variables=["system_prefix", "conversation_history", "query"],
+            ) | classifier | JsonOutputParser()
+            chain_input = {
+                "system_prefix": build_system_prefix(),
+                "conversation_history": "\n".join(
+                    f"[{m.get('role')}] {m.get('content', '')}"
+                    for m in get_conversation_history(state)
+                ),
+                "query": query,
+            }
+        else:
+            chain = PromptTemplate(
+                template=load_prompt("legacy/capability_route"),
+                input_variables=["capabilities", "query", "last_assistant_msg"],
+            ) | classifier | JsonOutputParser()
+            last_assistant = next(
+                (m.get("content", "") for m in reversed(state.get("messages", []))
+                 if m.get("role") == "assistant"),
+                "",
+            )
+            chain_input = {
+                "capabilities": registry.build_llm_context(),
+                "query": query,
+                "last_assistant_msg": last_assistant,
+            }
+        result = await chain.ainvoke(chain_input)
         cap = (result or {}).get("capability", "")
         if cap in registry.capabilities:
             logger.info(f"路由(tier3-llm): {cap}")

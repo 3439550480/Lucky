@@ -4,7 +4,9 @@ from langchain_core.prompts import PromptTemplate
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
+from app.agent.session.history_provider import get_conversation_history
 from app.agent.state import DataAgentState
+from app.conf.app_config import app_config
 from app.core.log import logger
 from app.prompt.prompt_loader import load_prompt
 
@@ -30,24 +32,47 @@ async def explain_result(state: DataAgentState, runtime: Runtime[DataAgentContex
     # 准备上下文：取结果前3行作为样例
     sample_result = result[:3]
     result_yaml = yaml.dump(sample_result, allow_unicode=True, sort_keys=False)
+    metric_yaml = yaml.dump(metric_infos, allow_unicode=True, sort_keys=False)
 
-    prompt = PromptTemplate(
-        template=load_prompt("explain_result"),
-        input_variables=["query", "sql", "result", "metric_infos"],
-    )
-    chain = prompt | llm | StrOutputParser()
-
-    explanation = await chain.ainvoke({
-        "query": query,
-        "sql": sql,
-        "result": result_yaml,
-        "metric_infos": yaml.dump(metric_infos, allow_unicode=True, sort_keys=False),
-    })
+    # [05 上下文管理] 开关二选一（新三区 / legacy 混排）
+    if app_config.features.context_management:
+        from app.agent.session.prefix import build_system_prefix
+        prompt = PromptTemplate(
+            template=load_prompt("explain_result"),
+            input_variables=["system_prefix", "conversation_history",
+                             "query", "sql", "result", "metric_infos"],
+        )
+        chain = prompt | llm | StrOutputParser()
+        explanation = await chain.ainvoke({
+            "system_prefix": build_system_prefix(),
+            "conversation_history": yaml.dump(
+                get_conversation_history(state), allow_unicode=True, sort_keys=False),
+            "query": query,
+            "sql": sql,
+            "result": result_yaml,
+            "metric_infos": metric_yaml,
+        })
+    else:
+        prompt = PromptTemplate(
+            template=load_prompt("legacy/explain_result"),
+            input_variables=["query", "sql", "result", "metric_infos"],
+        )
+        chain = prompt | llm | StrOutputParser()
+        explanation = await chain.ainvoke({
+            "query": query,
+            "sql": sql,
+            "result": result_yaml,
+            "metric_infos": metric_yaml,
+        })
     logger.info(f"解释结果：{explanation}")
     writer({"type": "explanation", "text": explanation})
     writer({"type": "progress", "step": "生成结果解释", "status": "success"})
 
-    # 保存助手消息到历史
-    messages = state.get("messages", [])
-    messages.append({"role": "assistant", "content": explanation})
-    return {"messages":messages}
+    # 保存助手消息到历史 —— [05] 写入走 context_store（带 capability 元数据）
+    if app_config.features.context_management:
+        from app.agent.session.context_store import append_assistant_message
+        messages = append_assistant_message(state, explanation, capability=state.get("capability"))
+    else:
+        messages = state.get("messages", [])
+        messages.append({"role": "assistant", "content": explanation})
+    return {"messages": messages}

@@ -15,20 +15,19 @@ from langchain_core.prompts import PromptTemplate
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
+from app.agent.session.context_store import append_assistant_message, append_user_message
+from app.agent.session.history_provider import (
+    get_conversation_history,
+    get_recent_assistant_content,
+)
+from app.agent.session.prefix import build_system_prefix
 from app.agent.state import DataAgentState
+from app.conf.app_config import app_config
 from app.core.log import logger
 from app.prompt.prompt_loader import load_prompt
 
 # LLM 失败时的静态兜底文案 —— 兜底节点自己不能再失败（04 §3.3）
 _FALLBACK_REPLY = "抱歉，我暂时没能生成回复，请稍后重试。"
-
-
-def _recent_assistant_content(state: DataAgentState) -> str:
-    """倒序取最近一条助手消息内容（供"刚才/上次"类问题参考）——05 起移交 history_provider"""
-    for msg in reversed(state.get("messages", [])):
-        if msg.get("role") == "assistant":
-            return msg.get("content", "")
-    return ""
 
 
 async def default_answer(state: DataAgentState, runtime: Runtime[DataAgentContext]) -> dict:
@@ -38,17 +37,33 @@ async def default_answer(state: DataAgentState, runtime: Runtime[DataAgentContex
     query = state["query"]
 
     # step 1: LLM 生成回复 —— 失败降级为静态文案（兜底节点不抛异常）
+    # [05 上下文管理] 开关二选一：新 = 三区模板 + history_provider；旧 = legacy 模板 + 内联读取
     fallback_used = False
     try:
-        chain = PromptTemplate(
-            template=load_prompt("default_answer"),
-            input_variables=["capabilities", "query", "last_assistant_msg"],
-        ) | llm | StrOutputParser()
-        reply = await chain.ainvoke({
-            "capabilities": runtime.context["capability_registry"].build_llm_context(),
-            "query": query,
-            "last_assistant_msg": _recent_assistant_content(state),
-        })
+        if app_config.features.context_management:
+            chain = PromptTemplate(
+                template=load_prompt("default_answer"),
+                input_variables=["system_prefix", "conversation_history", "query"],
+            ) | llm | StrOutputParser()
+            chain_input = {
+                "system_prefix": build_system_prefix(),
+                "conversation_history": "\n".join(
+                    f"[{m.get('role')}] {m.get('content', '')}"
+                    for m in get_conversation_history(state)
+                ),
+                "query": query,
+            }
+        else:
+            chain = PromptTemplate(
+                template=load_prompt("legacy/default_answer"),
+                input_variables=["capabilities", "query", "last_assistant_msg"],
+            ) | llm | StrOutputParser()
+            chain_input = {
+                "capabilities": runtime.context["capability_registry"].build_llm_context(),
+                "query": query,
+                "last_assistant_msg": get_recent_assistant_content(state),
+            }
+        reply = await chain.ainvoke(chain_input)
     except Exception as e:
         logger.error(f"default_answer LLM 失败，使用静态兜底: {e}")
         reply, fallback_used = _FALLBACK_REPLY, True
@@ -58,8 +73,14 @@ async def default_answer(state: DataAgentState, runtime: Runtime[DataAgentContex
             "status": "error" if fallback_used else "success"})
     writer({"type": "explanation", "text": reply})
 
-    # step 3: 轨迹写入 —— 用户消息 + 助手回复都入轨迹（trajectory 完整性，05 统一管理）
-    messages = list(state.get("messages", []))
-    messages.append({"role": "user", "content": query})
-    messages.append({"role": "assistant", "content": reply})
+    # step 3: 轨迹写入 —— 用户消息 + 助手回复都入轨迹
+    # [05] 开启开关时走 context_store（带 capability 元数据）
+    if app_config.features.context_management:
+        cap = state.get("capability") or "default"
+        messages = append_user_message(state, query, capability=cap)
+        messages = append_assistant_message({"messages": messages}, reply, capability=cap)
+    else:
+        messages = list(state.get("messages", []))
+        messages.append({"role": "user", "content": query})
+        messages.append({"role": "assistant", "content": reply})
     return {"intent_reply": reply, "messages": messages}

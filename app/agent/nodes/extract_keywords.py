@@ -9,7 +9,9 @@ import jieba.analyse
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
+from app.agent.session.context_store import append_user_message
 from app.agent.state import DataAgentState
+from app.conf.app_config import app_config
 from app.core.log import logger
 
 
@@ -22,8 +24,13 @@ async def extract_keywords(state: DataAgentState, runtime: Runtime[DataAgentCont
 
     try:
         query = state["query"]
-        messages = state.get("messages") or []   # 如果是 None，则初始化为空列表
-        messages.append({"role":"user","content":query})
+        # [05 上下文管理] 写入走 context_store（带 capability/ts 元数据）；
+        # 关闭开关时保持旧内联 append 形态（无元数据字段）
+        if app_config.features.context_management:
+            messages = append_user_message(state, query, capability=state.get("capability"))
+        else:
+            messages = state.get("messages") or []   # 如果是 None，则初始化为空列表
+            messages.append({"role": "user", "content": query})
         # 只保留更可能承载业务含义的词性，减少“的、帮我、一下”这类无检索价值的噪声
         allow_pos = (
             "n",  # 名词: 商品、订单、销售额

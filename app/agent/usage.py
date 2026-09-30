@@ -156,12 +156,19 @@ class LLMUsageTracker(BaseCallbackHandler):
                 input_tokens = usage.get("input_tokens")
                 output_tokens = usage.get("output_tokens")
                 total_tokens = usage.get("total_tokens")
-            # DeepSeek 扩展字段在 additional_kwargs（OpenAI 兼容端点透传的原始 usage），
-            # 键名以官方文档为准，编码时实测回填 —— 取不到不影响主流程
-            extra = getattr(message, "additional_kwargs", {}) or {}
-            provider_usage = extra.get("usage") or {}
-            cache_hit = provider_usage.get("prompt_cache_hit_tokens")
-            cache_miss = provider_usage.get("prompt_cache_miss_tokens")
+                # [05 §3.4] 缓存命中：标准层 input_token_details.cache_read（langchain 统一封装，
+                # DeepSeek 的 prompt_cache_hit_tokens / OpenAI 的 cached_tokens 都映射到这里）
+                cache_read = (usage.get("input_token_details") or {}).get("cache_read")
+            # 兜底：DeepSeek 原始字段实测在 response_metadata.token_usage
+            # （additional_kwargs.usage 为 None——2026-09-30 实测修正了原读取路径）
+            if cache_read is None:
+                rm = getattr(message, "response_metadata", {}) or {}
+                tu = rm.get("token_usage") or {}
+                cache_read = tu.get("prompt_cache_hit_tokens")
+            # 命中数已知时，未命中 = 输入总量 - 命中（下限 0 防御异常值）
+            if cache_read is not None:
+                cache_hit = cache_read
+                cache_miss = max((input_tokens or 0) - cache_read, 0)
         except (IndexError, AttributeError, TypeError):
             pass  # 结构不符合预期 → token 记 None，summary 的 note 会提示
         # step 3: 追加记账条目 —— 成功路径
@@ -211,6 +218,16 @@ class LLMUsageTracker(BaseCallbackHandler):
             agg[f] = sum(values) if values else None
         # step 2: 延迟聚合不受 usage 缺失影响，恒可计算
         agg["total_latency_ms"] = sum(r.latency_ms for r in records)
+        # step 2.5: [05 §3.4] 缓存命中统计 —— DeepSeek 扩展字段（其它 provider 恒 None → 不输出比率）
+        hit_values = [r.prompt_cache_hit_tokens for r in records
+                      if r.prompt_cache_hit_tokens is not None]
+        miss_values = [r.prompt_cache_miss_tokens for r in records
+                       if r.prompt_cache_miss_tokens is not None]
+        agg["cache_hit_tokens"] = sum(hit_values) if hit_values else None
+        agg["cache_miss_tokens"] = sum(miss_values) if miss_values else None
+        if agg["cache_hit_tokens"] is not None and (agg["cache_hit_tokens"] + (agg["cache_miss_tokens"] or 0)) > 0:
+            total_prompt = agg["cache_hit_tokens"] + (agg["cache_miss_tokens"] or 0)
+            agg["cache_hit_rate"] = round(agg["cache_hit_tokens"] / total_prompt, 4)
         # step 3: 环节维度聚合 —— by_stage 是 03 报告"成本花在哪"的直接来源；
         # 同一 stage 聚合 calls/tokens/latency（修正重试会让同 stage 出现多次调用，属预期）
         by_stage = {}

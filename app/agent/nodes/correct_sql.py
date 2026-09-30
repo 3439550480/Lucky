@@ -11,8 +11,9 @@ from langchain_core.prompts import PromptTemplate
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
-from app.agent.context import DataAgentContext
+from app.agent.session.history_provider import get_conversation_history
 from app.agent.state import DataAgentState
+from app.conf.app_config import app_config
 from app.core.log import logger
 from app.prompt.prompt_loader import load_prompt
 
@@ -37,38 +38,45 @@ async def correct_sql(state: DataAgentState, runtime: Runtime[DataAgentContext])
         sql = state["sql"]
         error = state["error"]
 
-        prompt = PromptTemplate(
-            template=load_prompt("correct_sql"),
-            input_variables=[
-                "table_infos",
-                "metric_infos",
-                "date_info",
-                "db_info",
-                "query",
-                "sql",
-                "error",
-            ],
-        )
+        # [05 上下文管理] 与 generate_sql 同款开关二选一（新三区 / legacy 混排）
+        if app_config.features.context_management:
+            history_yaml = yaml.dump(
+                get_conversation_history(state), allow_unicode=True, sort_keys=False)
+            template = load_prompt("correct_sql")
+            input_variables = ["system_prefix", "conversation_history", "table_infos",
+                               "metric_infos", "date_info", "db_info", "query",
+                               "sql", "error"]
+        else:
+            history_yaml = ""
+            template = load_prompt("legacy/correct_sql")
+            input_variables = ["table_infos", "metric_infos", "date_info", "db_info",
+                               "query", "sql", "error"]
+
+        prompt = PromptTemplate(template=template, input_variables=input_variables)
         # 修正后的输出仍然是一条纯 SQL 文本，用来覆盖 state["sql"]
         output_parser = StrOutputParser()
         chain = prompt | llm | output_parser
 
-        result = await chain.ainvoke(
-            {
-                # 与生成节点保持一致，用 YAML 向模型提供稳定 可读的结构化上下文
-                "table_infos": yaml.dump(
-                    table_infos, allow_unicode=True, sort_keys=False
-                ),
-                "metric_infos": yaml.dump(
-                    metric_infos, allow_unicode=True, sort_keys=False
-                ),
-                "date_info": yaml.dump(date_info, allow_unicode=True, sort_keys=False),
-                "db_info": yaml.dump(db_info, allow_unicode=True, sort_keys=False),
-                "query": query,
-                "sql": sql,
-                "error": error,
-            }
-        )
+        chain_input = {
+            # 与生成节点保持一致，用 YAML 向模型提供稳定 可读的结构化上下文
+            "table_infos": yaml.dump(
+                table_infos, allow_unicode=True, sort_keys=False
+            ),
+            "metric_infos": yaml.dump(
+                metric_infos, allow_unicode=True, sort_keys=False
+            ),
+            "date_info": yaml.dump(date_info, allow_unicode=True, sort_keys=False),
+            "db_info": yaml.dump(db_info, allow_unicode=True, sort_keys=False),
+            "query": query,
+            "sql": sql,
+            "error": error,
+            "conversation_history": history_yaml,
+        }
+        if app_config.features.context_management:
+            from app.agent.session.prefix import build_system_prefix
+            chain_input["system_prefix"] = build_system_prefix()
+
+        result = await chain.ainvoke(chain_input)
 
         logger.info(f"校正后的SQL：{result}")
         writer({"type": "progress", "step": step, "status": "success"})
