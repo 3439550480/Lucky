@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, asdict
 from app.agent.context import CapabilityHolder, DataAgentContext
 from app.agent.graph import graph
 from app.agent.llm_factory import create_llm
+from app.agent.memory.store import build_memory_store
 from app.agent.state import DataAgentState
 from app.agent.usage import LLMUsageTracker
 from app.conf.app_config import app_config
@@ -144,6 +145,7 @@ class EvaluationRunner:
                     capability_holder=CapabilityHolder(),
                     capability_registry=registry,
                     usage_tracker=tracker,
+                    memory_store=build_memory_store(),   # [06] 评测与在线共用同一记忆库（单用户假设）
                 )
                 # tracker 经 run config 挂载（01 §7.1 预留方案）：节点层 on_chain_start 只有
                 # run config 的 callbacks 能触达——by_stage 环节归属的数据来源

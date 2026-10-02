@@ -56,3 +56,6 @@ class DataAgentContext(TypedDict):
     capability_registry: "CapabilityRegistry"
     # [04 文档] 请求级用量采集器（路由分类专用 LLM 的调用也计入同一份账）
     usage_tracker: "LLMUsageTracker"
+    # [06 文档] 长期记忆存储（retriever 注入与 extractor 落库共用；
+    # features.memory.long_term 关闭时节点不消费，字段可缺省——消费方用 .get 容错）
+    memory_store: "MemoryStore"

@@ -33,3 +33,7 @@ node_modules/
 # 评测报告产物（数据集与代码入库，报告不入库）
 evaluation/reports/*
 !evaluation/reports/.gitkeep
+
+# 记忆库用户数据（06：教学演示的单用户记忆，不入库）
+data/memory/*
+!data/memory/.gitkeep

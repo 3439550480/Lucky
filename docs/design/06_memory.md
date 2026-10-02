@@ -1,8 +1,9 @@
 # 06 · 记忆管理（M6）
 
-> 状态：`draft`（评审中）　|　上位文档：[00_overview.md](00_overview.md)（final）、[05_context_management.md](05_context_management.md)（final）
+> 状态：`draft`（实现中）　|　上位文档：[00_overview.md](00_overview.md)（final）、[05_context_management.md](05_context_management.md)（final）
 > 记忆策略三要素（**已经项目所有者确认**）：①评估体系含"基础回忆"；②存放位置 = 轨迹 + 长期记忆；③存储结构 = Simple Notes + Advanced JSON Cards。
 > Agent 定位：**管家角色**——记忆的价值不止"答对"，更在于支撑主动性（主动使用已知偏好与关系）。
+> 修订记录：初稿；2026-10-02 §3.3 修订——正则预筛废弃（语义盲区/职责重复/归一化缺失），提取收敛为单通道 LLM 上下文压缩（四条格式硬约束：原子化/规范化/值保真/确定性），验收标准 3 同步改写
 
 ---
 
@@ -126,21 +127,25 @@ def build_memory_store() -> MemoryStore:
 ### 3.3 记忆提取（`app/agent/memory/extractor.py`）[NEW]
 
 ```python
-async def extract_memories(query: str, answer: str,
-                           llm, store: MemoryStore,
+async def extract_memories(query: str, answer: str, store: MemoryStore,
+                           llm, tracker, embedding_client,
                            thread_id: str) -> dict:
     """agent 运行结束后调用（QueryService finally 阶段，异步不阻塞响应已发送）。
-    流程：
-    1. 正则预筛（零成本）：会员号/邮箱/手机号/身份证号等高置信模式 → 直接 SimpleNote
-    2. LLM 提取（memory_extract.prompt）：判定 query 中是否含可记忆信息，
-       输出 JSON {"notes": [...], "cards": [{subject, relation_to_user, facts, narrative}]}
-       无可记忆信息 → 空输出（不强制提取）
-    3. 写入 store；提取/写入失败只打 warning，绝不影响主链路
+    单通道设计（2026-10-02 修订，废弃正则预筛）：
+    1. LLM 上下文压缩（memory_extract.prompt）：读当前轮 query+answer，
+       压缩为规范化事实语料——prompt 四条硬约束：原子化（一事实一条）/规范化（第三人称陈述，去口语）/
+       值保真（号码邮箱逐字符保真）/只提取用户主动提供的确定性信息（查询类数字禁止入库）
+    2. 内容级去重：写入前对照 store 已有内容集合，同内容跳过（重复陈述不累积）
+    3. 条目 embedding 随写随存（vector 字段，失败置 None 不阻断）
+    4. 提取/写入/向量化失败只打 warning，绝不影响主链路；LLM 不可用时本轮跳过
+      （已存记忆的检索不受影响——检索不依赖提取通道）
     返回 {"notes_added": int, "cards_added": int}（供日志与评估）
     """
 ```
 
-`prompts/memory_extract.prompt` [NEW]：说明管家定位、分流标准（关键少量→card，大量非关键→note）、输出 JSON Schema。
+> **正则预筛废弃理由（2026-10-02，项目所有者确认）**：① 语义盲区——正则匹配字符模式而非"陈述行为"，"查订单123456的物流"会被误存为永久错误记忆（错误写入比漏写严重得多）；② 职责重复——LLM 通道本就通读上下文，覆盖正则全部能力且零维护成本泛化新事实类型；③ 归一化缺失——正则只做字符捕获，做不了"金卡→黄金级会员"式的规范化压缩，而归一化才是事实可检索可注入的前提。"LLM 挂了也能存"的保底价值不成立：LLM 不可用时主对话已不可用，且已存记忆的检索不受影响。
+
+`prompts/memory_extract.prompt` [NEW]：管家定位 + 分流标准（关键少量→card，大量非关键→note）+ 四条格式硬约束（原子化/规范化/值保真/确定性）+ 输出 JSON Schema。
 
 ### 3.4 记忆检索注入（`app/agent/memory/retriever.py`）[NEW]
 
@@ -231,7 +236,7 @@ runner 执行顺序：先跑 `setup_runs`（各自 ainvoke，等提取完成）�
 
 1. **基础回忆闭环（核心验收）**：跨两次进程——进程 A 发"我的会员号是123456" → `data/memory/notes.json` 出现该 SimpleNote → 进程 B（重启，模拟跨实例）发"我的会员号是多少"（**新 thread_id**）→ 回答包含 "123456"
 2. **提取分流**："我现在用的是金牌会员，比较看重华东仓的发货速度" → 产出 MemoryCard（subject=用户本人，relation 含会员等级与发货偏好）；"帮我查一下订单" → 零提取（无可记忆信息不硬造）
-3. **正则预筛**：停掉 LLM（注入异常）后发"我的邮箱是abc@x.com" → 正则通道仍产出 SimpleNote（高置信信息不依赖 LLM 可用性）
+3. **提取失败容错（v1.1 修订，原"正则预筛"已废弃）**：停掉 LLM 后发"我的邮箱是abc@x.com" → `extract_memories` 不抛异常、返回计数 0、主链路不受影响；**已存记忆的检索不受提取通道故障影响**（检索不依赖提取 LLM）。附带确认的决策：提取输入 = 当前轮 query+answer（每轮都有提取机会，不读全量轨迹）；每轮运行都提取（answer 可为空串）；LLM 失败跳过 + warning 不重试
 4. **KV cache 纪律**：注入记忆的请求日志显示前缀部分 cache 命中数与无记忆请求一致（注入只发生在尾部动态区）；无相关记忆时传空串、缓存命中与无记忆请求完全一致
 5. **开关关闭**：`memory.long_term=false` → 无提取调用（by_stage 无 memory_extract）、`{memory_block}` 恒空、评测 memory 用例跳过
 6. **注入上限**：构造 20 条相关记忆 → 注入块最多 `retrieval_top_k`(5) 条

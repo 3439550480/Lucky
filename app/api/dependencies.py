@@ -19,6 +19,7 @@ from app.clients.mysql_client_manager import (
     meta_mysql_client_manager,
 )
 from app.clients.qdrant_client_manager import qdrant_client_manager
+from app.agent.memory.store import build_memory_store
 from app.repositories.es.value_es_repository import ValueESRepository
 from app.repositories.mysql.dw.dw_mysql_repository import DWMySQLRepository
 from app.repositories.mysql.meta.meta_mysql_repository import MetaMySQLRepository
@@ -82,6 +83,19 @@ async def get_value_es_repository() -> ValueESRepository:
     return ValueESRepository(es_client_manager.client)
 
 
+_memory_store = None
+
+
+def get_memory_store():
+    """获取长期记忆存储（06 文档；json_file 实现无连接概念，
+    进程内懒构建单例——共享同一落盘目录，评测/在线共用一份记忆）"""
+
+    global _memory_store
+    if _memory_store is None:
+        _memory_store = build_memory_store()
+    return _memory_store
+
+
 async def get_query_service(
     meta_mysql_repository: Annotated[
         MetaMySQLRepository, Depends(get_meta_mysql_repository)
@@ -97,6 +111,7 @@ async def get_query_service(
         MetricQdrantRepository, Depends(get_metric_qdrant_repository)
     ],
     value_es_repository: Annotated[ValueESRepository, Depends(get_value_es_repository)],
+    memory_store=Depends(get_memory_store),
 ) -> QueryService:
     """组装一次查询所需的业务服务"""
 
@@ -108,4 +123,5 @@ async def get_query_service(
         column_qdrant_repository=column_qdrant_repository,
         metric_qdrant_repository=metric_qdrant_repository,
         value_es_repository=value_es_repository,
+        memory_store=memory_store,
     )

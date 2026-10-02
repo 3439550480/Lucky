@@ -30,6 +30,7 @@ class QueryService:
         column_qdrant_repository: ColumnQdrantRepository,
         metric_qdrant_repository: MetricQdrantRepository,
         value_es_repository: ValueESRepository,
+        memory_store=None,   # [06] 长期记忆存储（dependencies 注入；None = 记忆功能不可用）
     ):
         # MySQL 仓储分别负责元数据补全和真实数仓环境信息读取
         self.meta_mysql_repository = meta_mysql_repository
@@ -40,6 +41,9 @@ class QueryService:
         self.column_qdrant_repository = column_qdrant_repository
         self.metric_qdrant_repository = metric_qdrant_repository
         self.value_es_repository = value_es_repository
+
+        # [06] 记忆存储（运行后提取用）
+        self.memory_store = memory_store
 
     async def query(self, query: str, thread_id: str,
                     model: str | None = None, capability: str | None = None):
@@ -97,6 +101,7 @@ class QueryService:
             config = {"configurable": {"thread_id": thread_id}}
             if tracker:
                 config["callbacks"] = [tracker]
+            last_answer = ""    # [06] 最后一条解释文本（运行失败时为空串，事实仍可提取）
             async for chunk in graph.astream(
                 input=state,
                 context=context,
@@ -107,6 +112,10 @@ class QueryService:
                 # 其后所有事件携带 capability；路由前的事件允许缺失（前端容忍）
                 if holder.value:
                     chunk.setdefault("capability", holder.value)
+                # [06] 捕获最后一条解释文本（finally 阶段记忆提取的 answer 输入；
+                # 记录在循环局部变量，运行失败时为空串——事实依然可提取）
+                if chunk.get("type") == "explanation" and chunk.get("text"):
+                    last_answer = chunk["text"]
                 # SSE 要求每条消息以 data: 开头，并以两个换行符结束
                 yield f"data: {json.dumps(chunk, ensure_ascii=False, default=str)}\n\n"
         except Exception as e:
@@ -119,3 +128,21 @@ class QueryService:
             # 请求结束输出用量汇总 —— 在线可观测 + 与 03 评估口径一致
             if tracker:
                 logger.info(f"LLM usage | {json.dumps(tracker.summary(), ensure_ascii=False)}")
+            # [06] 运行后记忆提取：响应已发送完毕，不阻塞用户；双重开关（long_term + extract_after_run）
+            if (self.memory_store
+                    and app_config.features.memory.long_term
+                    and app_config.memory.extract_after_run):
+                try:
+                    from app.agent.memory.extractor import extract_memories
+                    extract_llm = create_llm(app_config.memory.extraction_provider)
+                    await extract_memories(
+                        query=query,
+                        answer=last_answer,
+                        store=self.memory_store,
+                        llm=extract_llm,
+                        tracker=tracker,
+                        embedding_client=self.embedding_client,
+                        thread_id=thread_id,
+                    )
+                except Exception as e:
+                    logger.warning(f"[memory] 记忆提取异常（不影响主链路）: {e}")
