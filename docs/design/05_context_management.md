@@ -1,7 +1,7 @@
 # 05 · 上下文管理（M5）
 
-> 状态：`draft`（评审中）　|　上位文档：[00_overview.md](00_overview.md)（final）、[04_capability_routing.md](04_capability_routing.md)（final）
-> 修订记录：2026-09-21 初稿；同日按项目所有者确认修订 KV cache 策略——固定前缀 = **system prompt + 工具定义**，对话过程**完整放入**（截断/压缩策略后续优化，本期预留）
+> 状态：`final`（已实现并回归通过）　|　上位文档：[00_overview.md](00_overview.md)（final）、[04_capability_routing.md](04_capability_routing.md)（final）
+> 修订记录：2026-09-21 初稿；同日按项目所有者确认修订 KV cache 策略——固定前缀 = **system prompt + 工具定义**，对话过程**完整放入**（截断/压缩策略后续优化，本期预留）；2026-10-02 实现完成标记 final。实现期修订三处：① §4#16 的 usage 缓存字段在 01 阶段已预先落地；② 缓存字段读取路径实测修正——`additional_kwargs.usage` 为 None，实际取 `usage_metadata.input_token_details.cache_read`（langchain 标准层，多厂商通用），DeepSeek 原始字段 `response_metadata.token_usage.prompt_cache_hit_tokens` 作兜底；③ summary() 增加命中率聚合。回归证据：eval_quick 10 用例全绿（意图/工具/SQL 均 100%，BUG-01 哨兵用例通过）；同会话第二轮 cache hit 2688 tokens（命中率 35%，命中量为前缀区体积）；`context_management=false` legacy 回归通过
 > 职责分界（00 §1.4）：本文管**轨迹的存储与生命周期**（记账、截断、隔离、KV cache 结构）；轨迹之上的**使用策略**（相关历史检索注入）与长期记忆接口在 [06_memory.md](06_memory.md)。
 > 改造点基于对 `messages` 全部读写点的核对（intent_classify 已删、extract_keywords L25-26/L52、explain_result L49-51、generate_sql L34-35、simple_answer 已删）。
 

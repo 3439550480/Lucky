@@ -146,7 +146,9 @@ graph_builder.add_edge("run_sql", "explain_result")
 graph_builder.add_edge("explain_result", END)
 
 # 编译后的 graph 是对外使用的 Agent 执行入口
-checkpointer = InMemorySaver()
+# [05 §3.5] checkpointer 经存储抽象装配（v1 恒 InMemory；Redis/Sqlite 后端预留接口）
+from app.agent.session.session_store import build_session_store  # 局部导入：置于图组装处，来源一目了然
+checkpointer = build_session_store().build_checkpointer()
 graph = graph_builder.compile(checkpointer=checkpointer)
 
 if __name__ == "__main__":
