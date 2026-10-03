@@ -1,46 +1,31 @@
-```text
-📦 shopkeeper-agent/
-│
-├── 📂 app/                        # 🧠 后端源码主目录
-│   ├── 📂 agent/                  # 问数智能体 & LangGraph 图流程
-│   │                              #   ├─ 节点 (nodes)
-│   │                              #   ├─ 状态 (state)
-│   │                              #   ├─ 上下文 (context)
-│   │                              #   └─ 图编排 (graph)
-│   ├── 📂 api/                    # 🌐 对外 HTTP 接口层
-│   │                              #   FastAPI 路由 · 依赖注入 · 请求参数结构
-│   ├── 📂 clients/                # 🔌 基础服务客户端
-│   │                              #   MySQL · Elasticsearch · Qdrant · Embedding 服务
-│   ├── 📂 conf/                   # ⚙️ 配置类 & 加载工具
-│   │                              #   将 YAML 配置转为代码可用的对象
-│   ├── 📂 core/                   # 🏗️ 通用基础能力
-│   │                              #   日志 · 生命周期管理 · 请求上下文
-│   ├── 📂 entities/               # 📋 业务实体定义
-│   │                              #   比 ORM 模型更贴近业务含义的数据结构
-│   ├── 📂 models/                 # 🗃️ ORM 模型
-│   │                              #   对应 MySQL 表结构
-│   ├── 📂 prompt/                 # 💬 提示词加载工具
-│   │                              #   读取 & 组织静态 Prompt 资源
-│   ├── 📂 repositories/           # 📡 数据访问层
-│   │                              #   封装 MySQL · Qdrant · Elasticsearch 的读写逻辑
-│   ├── 📂 scripts/                # 🔧 工具脚本
-│   │                              #   构建元数据知识库 · 初始化/同步数据
-│   └── 📂 services/               # 🧩 业务逻辑层
-│                                  #   串联 clients · repositories · agent
-│
-├── 📂 conf/                       # ⚙️ 项目级 YAML 配置
-│                                  #   数据库 · 向量库 · ES · LLM · 日志
-│
-├── 📂 docker/                     # 🐳 本地开发环境
-│   ├── 📂 elasticsearch/          # Elasticsearch 相关
-│   │                              #   Dockerfile · 插件 · 初始化资源
-│   ├── 📂 embedding/              # 🤖 Embedding 服务
-│   │                              #   模型目录 · 推理服务配置
-│   └── 📂 mysql/                  # 🗄️ MySQL 初始化
-│                                  #   SQL 脚本 · 建表 · 测试数据
-│
-├── 📂 logs/                       # 📝 本地运行时日志
-│
-└── 📂 prompts/                    # 📄 静态提示词文件
-                                   #   与 app/prompt 加载工具配合使用
-```
+﻿# Shopkeeper-Agent
+
+基于 FastAPI + LangGraph 的通用智能助手平台，核心能力为电商问数（Text2SQL）：
+自然语言提问 → 能力路由 → 多路召回（Qdrant 向量 + ES 全文）→ LLM 生成 SQL → 校验执行 → SSE 流式推送结果与解释。
+
+架构特性：能力路由（规则 → embedding → LLM 三级递进，可插拔）、上下文管理与 KV cache 友好提示词（固定前缀 + 追加式历史）、长期记忆（Simple Notes + Memory Cards）、评估框架（检索/意图/SQL/成本/基础回忆五维指标 + Feature Flags 对照实验）、模型可切换（DeepSeek / Qwen / GLM，前端选择）。
+
+## 快速启动
+
+1. 依赖服务：`docker compose -f docker/docker-compose.yaml up -d`（mysql 映射 **3307**；首次启动自动执行 docker/mysql/*.sql 初始化）
+2. 配置：`.env` 填入 DEEPSEEK_API_KEY / DASHSCOPE_API_KEY / ZHIPU_API_KEY（.env 是唯一密钥来源，已 gitignore）；`conf/app_config.yaml`（Feature Flags 等）；`conf/capability_config.yaml`（能力注册表）
+3. 构建元数据知识库：`uv run python -m app.scripts.build_meta_knowledge`
+4. 后端：`uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000`
+5. 前端：`cd frontend && pnpm install && pnpm dev`
+
+## 评估（Agent 质量量化）
+
+- 快速回归（10 用例约 3 分钟）：`uv run python -m app.scripts.run_evaluation -d evaluation/datasets/eval_quick.json -e quick`
+- 全量基线（50 用例约 17 分钟）：`-d evaluation/datasets/eval_v1.json -e baseline`
+- 基础回忆（需开启记忆）：`-d evaluation/datasets/eval_memory.json -e mem --features memory.long_term=true`
+- 对照实验：`--features context_management=false` 等开关覆盖；`--compare a.json b.json` 并排对比
+
+指标：检索三通道 hit@k/MRR/P/R、意图准确率、工具触发（漏调/误调）、SQL 可执行率/结果正确性、成本（token/费用/环节分布，DeepSeek 峰谷自动判档）、基础回忆（store/retrieval/recall/persistence）。
+
+## 设计文档（docs/design/，全部 final）
+
+00_overview 总体架构·事件协议契约·Feature Flags；01_llm_factory LLM 多模型工厂与用量采集；02_model_selection 模型选择；03_evaluation 评估框架；04_capability_routing 能力路由；05_context_management 上下文管理与 KV cache；06_memory 记忆管理；07_acceptance 验收手册。Bug 档案见 docs/bugs/。
+
+## 项目结构
+
+app/agent（LangGraph 图·能力路由·session 上下文·memory 记忆）、app/api、app/clients、app/conf、app/evaluation（评估框架）、app/repositories、app/scripts（建库·评估CLI）、app/services；conf/（三份 YAML）；docker/（mysql 初始化 SQL·es·embedding）；docs/（design·bugs）；evaluation/（datasets·reports）；frontend/（React19+Vite+Tailwind）；prompts/（legacy/ 为关闭上下文管理的对照组）。

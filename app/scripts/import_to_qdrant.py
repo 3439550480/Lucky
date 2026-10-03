@@ -1,3 +1,5 @@
+# ⚠️ [已废弃] 本脚本为早期硬编码配置的导入实现，仅留作教学对照。
+# 正式建库请使用：uv run python -m app.scripts.build_meta_knowledge（配置驱动，meta_config.yaml）
 import json
 from typing import List, Any
 from qdrant_client import QdrantClient

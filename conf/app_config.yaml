@@ -36,7 +36,7 @@ embedding:
 es:
   host: localhost
   port: 9200
-  index_name: data_agent
+  index_name: data_agent         # [已废弃] 实际索引名 value_index 由 ValueESRepository 内部定义；此键未使用
 
 llm:                          # [REWRITE] 单模型 → 多厂商 providers
   default: deepseek           # 请求未指定/非法 provider 时兜底

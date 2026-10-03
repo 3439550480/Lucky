@@ -1,6 +1,7 @@
 # 07 · 验收清单与联调手册（原 06_acceptance，随文档拆分顺延）
 
-> 状态：`draft`（评审中）　|　上位文档：[00_overview.md](00_overview.md)（final）及其余全部模块文档
+> 状态：`final`（验收执行完毕）　|　上位文档：[00_overview.md](00_overview.md)（final）及其余全部模块文档
+> 执行记录：2026-10-03 开关矩阵 S1-S10 全部通过（S10 修复 apply_feature_overrides 严格布尔解析后通过）；§4.1 后端联调核对通过（/api/models、SSE capability 注入、usage 日志开关语义）；§6.1 清理清单核对通过（start_recall/intent_classify/simple_answer/langchain_deepseek 清零，es.index_name 标注废弃，import_to_qdrant 加废弃指引）；记录表见 acceptance_log.md；README 已更新
 > 本文是编码阶段的**总验收依据**：开关矩阵冒烟、端到端联调、实验执行手册、清理清单。各模块的过程验收见 01~06 文档各自的 §6，本文只做汇总 gates 与全局项。
 
 ---

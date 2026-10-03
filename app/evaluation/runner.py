@@ -29,7 +29,14 @@ def apply_feature_overrides(overrides: dict[str, str]) -> None:
         current = getattr(obj, parts[-1])
         # 按字段现值类型转换（bool/int/float/str），转换失败直接抛错——实验配置错误要显式暴露
         if isinstance(current, bool):
-            converted = value.lower() in ("true", "1", "yes")
+            # [07 S10] 严格解析：非法布尔串（如 "abc"）报错而非静默转 False
+            if value.lower() in ("true", "1", "yes"):
+                converted = True
+            elif value.lower() in ("false", "0", "no"):
+                converted = False
+            else:
+                raise ValueError(
+                    f"--features {key}={value} 非法：布尔开关只接受 true/false/1/0/yes/no")
         elif isinstance(current, int):
             converted = int(value)
         elif isinstance(current, float):
