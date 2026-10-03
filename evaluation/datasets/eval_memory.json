@@ -1,0 +1,48 @@
+{
+  "dataset_id": "eval_memory",
+  "version": "1.0",
+  "description": "基础回忆评测集（06 §3.5）。运行需显式开启记忆：--features memory.long_term=true。三用例：事实存+跨会话回忆 / 偏好卡回忆 / 闲聊对照。每次运行前建议清空 data/memory/*.json。",
+  "defaults": {
+    "match_mode": "exact",
+    "k": 5
+  },
+  "cases": [
+    {
+      "id": "mem_member_recall",
+      "enabled": true,
+      "query": "我的会员号是多少？",
+      "memory_setup": {
+        "setup_runs": [
+          "我的会员号是123456，记一下"
+        ],
+        "expected_recall": [
+          "123456"
+        ],
+        "expect_note": true
+      }
+    },
+    {
+      "id": "mem_preference_card",
+      "enabled": true,
+      "query": "我是什么会员等级？平时比较关注哪里的数据？",
+      "memory_setup": {
+        "setup_runs": [
+          "我是黄金会员，平时比较关注华东地区的数据"
+        ],
+        "expected_recall": [
+          "黄金",
+          "华东"
+        ]
+      }
+    },
+    {
+      "id": "mem_chat_control",
+      "enabled": true,
+      "query": "谢谢你呀",
+      "expected": {
+        "intent": "default",
+        "tools": []
+      }
+    }
+  ]
+}

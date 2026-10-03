@@ -55,6 +55,7 @@ class CaseResult:
     tracker_summary: dict | None
     tracker_records: list = field(default_factory=list)   # LLMCallRecord 列表（cost 逐调用判档用）
     sql_metrics_input: dict = field(default_factory=dict)
+    memory_result: dict | None = None    # [06] 基础回忆用例：{"stored","retrieved","recalled"}
     error: str | None = None
 
 
@@ -123,6 +124,17 @@ class EvaluationRunner:
         thread_id = f"eval_{self.dataset.dataset_id}_{case.id}"
         tracker = LLMUsageTracker(provider=self.provider,
                                   model=app_config.llm.providers[self.provider].get("model", ""))
+
+        # [06] 基础回忆用例分支（memory_setup 存在时走专用流程）
+        if case.memory_setup:
+            if not app_config.features.memory.long_term:
+                return CaseResult(
+                    case=case, status="skipped", final_state=None,
+                    tracker_summary=None, tracker_records=[],
+                    sql_metrics_input=self._sql_input(case, None, None, False, None),
+                    error="memory.long_term=false，memory 用例跳过（06 §5）")
+            return await self._run_memory_case(
+                case, tracker, meta_mgr, dw_mgr, qdrant_mgr, emb_mgr, value_es_repo)
         state = DataAgentState(                          # 与 query_service.query() 初始值严格一致
             query=case.query, keywords=[],
             retrieved_column_infos=[], retrieved_metric_infos=[], retrieved_value_infos=[],
@@ -176,6 +188,118 @@ class EvaluationRunner:
             case=case, status="ok", final_state=final_state,
             tracker_summary=tracker.summary(), tracker_records=tracker.records(),
             sql_metrics_input=self._sql_input(case, final_state, golden_rows, True, None),
+        )
+
+    async def _ainvoke(self, query: str, thread_id: str, tracker,
+                       meta_mgr, dw_mgr, qdrant_mgr, emb_mgr, value_es_repo):
+        """单次图执行（memory 用例的 setup/probe 复用入口；与 _run_case 的 context 组装一致）"""
+        from app.agent.capabilities.registry import registry
+        from app.agent.context import CapabilityHolder, DataAgentContext
+        from app.repositories.mysql.dw.dw_mysql_repository import DWMySQLRepository
+        from app.repositories.mysql.meta.meta_mysql_repository import MetaMySQLRepository
+        from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
+        from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
+
+        state = DataAgentState(
+            query=query, keywords=[],
+            retrieved_column_infos=[], retrieved_metric_infos=[], retrieved_value_infos=[],
+            table_infos=[], metric_infos=[], error="", sql="", retry_count=0,
+            messages=[], intent="", intent_reply="",
+            requested_capability="", capability="", capability_source="", tool_calls=[],
+        )
+        async with dw_mgr.session_factory() as dw_session, \
+                   meta_mgr.session_factory() as meta_session:
+            context = DataAgentContext(
+                column_qdrant_repository=ColumnQdrantRepository(qdrant_mgr.client),
+                embedding_client=emb_mgr.client,
+                metric_qdrant_repository=MetricQdrantRepository(qdrant_mgr.client),
+                value_es_repository=value_es_repo,
+                meta_mysql_repository=MetaMySQLRepository(meta_session),
+                dw_mysql_repository=DWMySQLRepository(dw_session),
+                llm=create_llm(self.provider),
+                capability_holder=CapabilityHolder(),
+                capability_registry=registry,
+                usage_tracker=tracker,
+                memory_store=build_memory_store(),   # 每次新实例（重读磁盘，持久化可验证）
+            )
+            config: dict = {"configurable": {"thread_id": thread_id}}
+            if tracker:
+                config["callbacks"] = [tracker]
+            return await graph.ainvoke(input=state, context=context, config=config)
+
+    async def _run_memory_case(self, case: EvaluationCase, tracker,
+                               meta_mgr, dw_mgr, qdrant_mgr, emb_mgr, value_es_repo) -> CaseResult:
+        """基础回忆用例三阶段（06 §3.5 v1.1 分层）：
+        阶段 1  setup_runs 逐条运行 + 逐轮提取
+        阶段 2  fresh_store 落盘校验（⚠️ 阶段 1 全部完成后才构建——测"落盘"而非内存态）
+        阶段 3  probe（全新 thread_id 跨会话 + 全新 store 实例跨实例代理）；
+                检索层（确定性）与输出层（LLM）分开度量——评审意见 3"""
+        import json as _json
+        import time as _time
+
+        from app.agent.memory.extractor import extract_memories
+        from app.agent.memory.store import build_memory_store as _fresh_store
+        from app.evaluation.memory_metrics import value_in_text
+
+        base = f"eval_{self.dataset.dataset_id}_{case.id}"
+        mem = case.memory_setup or {}
+        expected = mem.get("expected_recall") or []
+
+        # ---- 阶段 1: setup runs + 逐轮提取 ----
+        for i, setup_query in enumerate(mem.get("setup_runs") or []):
+            setup_tracker = LLMUsageTracker(
+                provider=self.provider,
+                model=app_config.llm.providers[self.provider].get("model", ""))
+            final = await self._ainvoke(setup_query, f"{base}_setup{i}",
+                                        setup_tracker, meta_mgr, dw_mgr, qdrant_mgr, emb_mgr, value_es_repo)
+            store = build_memory_store()           # 每轮重建（读盘最新状态做去重）
+            await extract_memories(
+                query=setup_query,
+                answer=final.get("intent_reply") or "",
+                store=store,
+                llm=create_llm(app_config.memory.extraction_provider),
+                tracker=None,                      # 提取成本不在本用例 tracker 口径（setup 独立）
+                embedding_client=emb_mgr.client,
+                thread_id=f"{base}_setup{i}",
+            )
+            await asyncio.sleep(self.interval)
+
+        # ---- 阶段 2: fresh_store 落盘校验（阶段 1 完成后才构建——评审意见 1）----
+        fresh_store = _fresh_store()
+        contents = {n.content for n in fresh_store.all_notes()}
+        contents |= {f for c in fresh_store.all_cards() for f in c.facts}
+        stored = all(any(value_in_text(v, s) for s in contents) for v in expected) if expected else True
+
+        # ---- 阶段 3: probe（跨会话新 thread_id）----
+        probe_state = await self._ainvoke(case.query, f"{base}_probe",
+                                          tracker, meta_mgr, dw_mgr, qdrant_mgr, emb_mgr, value_es_repo)
+        output_text = (probe_state.get("intent_reply") or "") + \
+            _json.dumps(probe_state.get("result") or [], ensure_ascii=False, default=str)
+        recalled = all(value_in_text(v, output_text) for v in expected) if expected else True
+
+        # ---- 检索层（确定性）：期望值条目必须被 probe query 的向量检索召回 ----
+        retrieved = False
+        try:
+            qvec = await emb_mgr.client.aembed_query(case.query)
+            ranked = fresh_store.search(qvec, app_config.memory.retrieval_top_k)
+            item_texts = []
+            for item, _score in ranked:
+                if hasattr(item, "subject"):
+                    item_texts.append(item.subject + "；" + "；".join(item.facts))
+                else:
+                    item_texts.append(item.content)
+            retrieved = all(any(value_in_text(v, t) for t in item_texts) for v in expected)
+        except Exception as e:
+            logger.warning(f"[eval] memory 检索层度量失败: {e}")
+
+        if not all([stored, retrieved, recalled]):
+            logger.warning(f"[eval] memory 用例 {case.id}: stored={stored} "
+                           f"retrieved={retrieved} recalled={recalled}")
+        return CaseResult(
+            case=case, status="ok", final_state=probe_state,
+            tracker_summary=tracker.summary(), tracker_records=tracker.records(),
+            sql_metrics_input=self._sql_input(case, None, None, False, None),
+            memory_result={"stored": stored, "retrieved": retrieved, "recalled": recalled},
         )
 
     @staticmethod

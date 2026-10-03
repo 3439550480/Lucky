@@ -20,6 +20,7 @@ class EvaluationCase:
     match_mode: str = "exact"          # 继承 defaults
     k: int = 5                         # 继承 defaults
     notes: str = ""
+    memory_setup: dict | None = None   # [06] 基础回忆用例：{"setup_runs": [...], "expected_recall": [...], "expect_note": bool}
 
 
 @dataclass
@@ -81,6 +82,15 @@ def load_dataset(path: Path) -> EvaluationDataset:
                 raise _err(hint, f"用例 {case_id} 的 expected.{list_key} 必须为 list[str]")
         if "intent" in expected and not isinstance(expected["intent"], str):
             raise _err(hint, f"用例 {case_id} 的 expected.intent 必须为 str")
+        # [06] memory_setup 类型校验（基础回忆用例）
+        mem = item.get("memory_setup")
+        if mem is not None:
+            if not isinstance(mem, dict):
+                raise _err(hint, f"用例 {case_id} 的 memory_setup 必须为 dict")
+            for list_key in ("setup_runs", "expected_recall"):
+                v = mem.get(list_key)
+                if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+                    raise _err(hint, f"用例 {case_id} 的 memory_setup.{list_key} 必须为 list[str]")
 
         if not item["enabled"]:
             disabled_count += 1
@@ -93,6 +103,7 @@ def load_dataset(path: Path) -> EvaluationDataset:
             match_mode=item.get("match_mode", match_mode),
             k=item.get("k", k),
             notes=item.get("notes", ""),
+            memory_setup=item.get("memory_setup"),
         ))
 
     return EvaluationDataset(

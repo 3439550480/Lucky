@@ -1,9 +1,9 @@
 # 06 · 记忆管理（M6）
 
-> 状态：`draft`（实现中）　|　上位文档：[00_overview.md](00_overview.md)（final）、[05_context_management.md](05_context_management.md)（final）
+> 状态：`final`（已实现并回归通过）　|　上位文档：[00_overview.md](00_overview.md)（final）、[05_context_management.md](05_context_management.md)（final）
 > 记忆策略三要素（**已经项目所有者确认**）：①评估体系含"基础回忆"；②存放位置 = 轨迹 + 长期记忆；③存储结构 = Simple Notes + Advanced JSON Cards。
 > Agent 定位：**管家角色**——记忆的价值不止"答对"，更在于支撑主动性（主动使用已知偏好与关系）。
-> 修订记录：初稿；2026-10-02 §3.3 修订——正则预筛废弃（语义盲区/职责重复/归一化缺失），提取收敛为单通道 LLM 上下文压缩（四条格式硬约束：原子化/规范化/值保真/确定性），验收标准 3 同步改写
+> 修订记录：初稿；2026-10-02 §3.3 修订——正则预筛废弃（语义盲区/职责重复/归一化缺失，项目所有者确认），提取收敛为单通道 LLM 上下文压缩（四条格式硬约束：原子化/规范化/值保真/确定性），验收标准 3 同步改写；2026-10-03 实现完成标记 final。实现期修订：① §3.2 search 回归 MemoryStore 接口（评审确认——换 Qdrant 后端 retriever 零改动）+ numpy 向量化余弦（维度守卫/模长预计算/零向量防御）；② §3.5 指标分层 v1.1——recall 拆为 retrieval_rate（检索层，确定性，暴露写入端漏向量 bug）与 recall_accuracy（输出层，LLM flaky 维度）+ 值匹配数字边界防御；③ 阈值校准 0.80→0.60（bge-small-zh 实测回忆对 0.7535 被漏）；④ §3.3 提取输入 = 当前轮 query+answer（每轮提取，不读全量轨迹）；每轮运行都提取（answer 可空）；LLM 失败跳过不重试。回归证据：eval_memory 3 用例——store_rate/retrieval_rate/recall_accuracy/persistence 全 1.0（support=2），重复陈述去重、纯查询零提取、偏好卡分流均验证通过
 
 ---
 

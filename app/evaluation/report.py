@@ -84,11 +84,21 @@ def compute_aggregate(results: list[CaseResult], meta: dict) -> dict:
         quality["tool"] = compute_tool_metrics(pairs)
     else:
         quality["tool"] = {"disabled": True}
-    # ---- SQL（可执行率分母=全部用例含失败；正确性分母=golden 可比用例，§3.3）----
+    # ---- SQL（可执行率分母=全部非 skipped 用例；正确性分母=golden 可比用例，§3.3）----
     if ev.sql_metrics:
-        quality["sql"] = compute_sql_metrics([r.sql_metrics_input for r in results])
+        quality["sql"] = compute_sql_metrics(
+            [r.sql_metrics_input for r in results if r.status != "skipped"])
     else:
         quality["sql"] = {"disabled": True}
+
+    # ---- 基础回忆（06 §3.5；仅 memory_setup 用例参与，skipped 不计入）----
+    if ev.memory_metrics:
+        from app.evaluation.memory_metrics import compute_memory_metrics
+        mem_rows = [r.memory_result for r in results
+                    if r.case.memory_setup and r.memory_result]
+        quality["memory"] = compute_memory_metrics(mem_rows)
+    else:
+        quality["memory"] = {"disabled": True}
     # ---- 成本 ----
     if ev.cost_metrics:
         provider_cfg = app_config.llm.providers.get(meta["provider"], {})
@@ -123,6 +133,7 @@ def _cases_detail(results: list[CaseResult], meta: dict) -> list[dict]:
                     "values": [v.value for v in (fs.get("retrieved_value_infos") or [])],
                 },
                 "retry_count": fs.get("retry_count", 0),
+                "memory_result": r.memory_result,
             })
         if r.tracker_summary:
             item["cost"] = compute_case_cost(r.tracker_records, r.tracker_summary,
@@ -193,6 +204,17 @@ def render_markdown(results: list[CaseResult], dataset, meta: dict, aggregate: d
                   f"recall：{_fmt(tool['tool_recall'], True)}　precision：{_fmt(tool['tool_precision'], True)}　"
                   f"漏调/误调/正确：{tool['confusion']['missed']}/{tool['confusion']['false_positive']}/"
                   f"{tool['confusion']['correct']}", ""]
+    mem = q.get("memory") or {}
+    if mem.get("disabled"):
+        lines += ["- 基础回忆：disabled"]
+    else:
+        lines += [f"### 基础回忆（support={mem.get('support', 0)}）", "",
+                  f"store_rate：**{_fmt(mem.get('store_rate'), True)}**　"
+                  f"retrieval_rate（检索层）：{_fmt(mem.get('retrieval_rate'), True)}　"
+                  f"recall（输出层）：{_fmt(mem.get('recall_accuracy'), True)}　"
+                  f"persistence（代理）：{_fmt(mem.get('persistence'), True)}", ""]
+        if mem.get("support", 0) == 0:
+            lines += ["（数据集无 memory_setup 用例）", ""]
     sql = q["sql"]
     if sql.get("disabled"):
         lines += ["- SQL：disabled"]
@@ -253,6 +275,7 @@ _COMPARE_COLUMNS = (
     ("工具触发准确率", lambda p: _dig(p, "aggregate", "quality", "tool", "invocation_accuracy"), True),
     ("SQL可执行率", lambda p: _dig(p, "aggregate", "quality", "sql", "executability"), True),
     ("SQL正确性", lambda p: _dig(p, "aggregate", "quality", "sql", "correctness"), True),
+    ("基础回忆", lambda p: _dig(p, "aggregate", "quality", "memory", "recall_accuracy"), True),
     ("每问成本(元)", lambda p: _dig(p, "aggregate", "cost", "avg_cost_per_case"), False),
     ("总耗时(s)", lambda p: _dig(p, "meta", "duration_s"), False),
 )
