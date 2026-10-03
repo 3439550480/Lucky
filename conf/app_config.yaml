@@ -100,4 +100,5 @@ memory:                       # [NEW] 记忆管理（06 文档 §2.1）
   extract_after_run: true
   extraction_provider: deepseek
   retrieval_top_k: 5
-  similarity_threshold: 0.80
+  similarity_threshold: 0.60    # bge-small-zh 校准：相关非改写短文本对典型 0.6~0.8，
+                                # 0.80 会漏掉"会员号是多少 vs 会员号是123456"类回忆对（实测 0.7535）

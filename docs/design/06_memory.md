@@ -47,7 +47,8 @@ memory:                          # [MODIFY] 在 features.memory 开关之外新�
   extract_after_run: true        # 每次 agent 运行结束后执行记忆提取
   extraction_provider: deepseek  # 提取用 LLM（与分类同理：解耦于用户选择的生成模型）
   retrieval_top_k: 5             # 注入提示词的记忆条数上限（notes+cards 合计）
-  similarity_threshold: 0.80     # 检索相似度阈值（复用 embedding 能力）
+  similarity_threshold: 0.60     # 检索相似度阈值（复用 embedding 能力；bge-small-zh 校准值——
+                                 # 相关非改写短文本对典型 0.6~0.8，0.80 会漏掉回忆对，实测 0.7535）
 ```
 
 ### 2.2 `AppConfig` dataclass（`app/conf/app_config.py`）

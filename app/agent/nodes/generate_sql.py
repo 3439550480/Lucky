@@ -41,14 +41,26 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
             history_yaml = yaml.dump(
                 get_conversation_history(state), allow_unicode=True, sort_keys=False)
             template = load_prompt("generate_sql")
-            input_variables = ["system_prefix", "conversation_history", "table_infos",
-                               "metric_infos", "date_info", "db_info", "query"]
+            input_variables = ["system_prefix", "conversation_history", "memory_block",
+                               "table_infos", "metric_infos", "date_info", "db_info", "query"]
+            # [06 记忆注入] 动态尾部（对话历史之后、本次上下文之前，06 §3.4 纪律）；
+            # long_term 关闭/无记忆/检索失败 → 空串（模板结构不变，缓存照常命中）
+            memory_block = ""
+            if app_config.features.memory.long_term:
+                try:
+                    from app.agent.memory.retriever import retrieve_memory_block
+                    memory_block = await retrieve_memory_block(
+                        query, runtime.context.get("memory_store"),
+                        runtime.context["embedding_client"])
+                except Exception as e:
+                    logger.warning(f"[memory] 记忆注入失败（跳过）: {e}")
         else:
             history_yaml = yaml.dump(
                 (state.get("messages") or [])[-10:], allow_unicode=True, sort_keys=False)
             template = load_prompt("legacy/generate_sql")
             input_variables = ["table_infos", "metric_infos", "date_info",
                                "db_info", "query", "conversation_history"]
+            memory_block = ""
 
         prompt = PromptTemplate(template=template, input_variables=input_variables)
         # SQL 生成节点只需要纯文本 SQL，不能要求模型输出 JSON 或 Markdown 代码块
@@ -67,6 +79,7 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
             "db_info": yaml.dump(db_info, allow_unicode=True, sort_keys=False),
             "query": query,
             "conversation_history": history_yaml,
+            "memory_block": memory_block,
         }
         if app_config.features.context_management:
             from app.agent.session.prefix import build_system_prefix

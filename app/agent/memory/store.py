@@ -9,6 +9,11 @@ v1 介质：data/memory/notes.json + cards.json（原子写 tmp+rename）；
 向量随写随存（条目内容的 embedding 缓存在同文件，避免重启重算）。
 ⚠️ v1 单用户假设（00 §1.4）：记忆库全局共享，user_id 维度预留未启用，
 评测与演示勿在记忆中放入敏感信息（06 §7.4）。
+
+规模化路径（评审确认 2026-10-02）：search 在存储接口中（06 §3.2 原案），
+条目上万时实现 QdrantMemoryStore（memory collection + ANN 检索）即可，
+retriever 与调用方零改动。v1 不直上 Qdrant 的理由：①记忆是默认关闭的可选功能，
+不应硬依赖向量库存活（降耦）；②json_file + numpy 向量化在万条以内 <5ms，边界清晰。
 """
 import json
 import os
@@ -17,6 +22,8 @@ import uuid
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+import numpy as np
 
 from app.conf.app_config import app_config
 from app.core.log import logger
@@ -58,9 +65,9 @@ class MemoryCard:
 
 
 class MemoryStore(ABC):
-    """记忆存储抽象——纯存取接口，不感知 embedding 客户端
-    （向量由调用方算好随条目存取，依赖更小、后端可换；
-    search 由 retriever 基于条目自带 vector 实现余弦计算，接口因此收窄）"""
+    """记忆存储抽象——存取 + 向量检索（06 §3.2 原案）。
+    接口刻意收窄为「存取 + search」：换 Qdrant 后端时只需实现本接口的 search（ANN），
+    retriever 与调用方零改动。store 不感知 embedding 客户端（向量由调用方算好随条目存取）"""
 
     @abstractmethod
     def save_note(self, note: SimpleNote) -> None: ...
@@ -75,6 +82,11 @@ class MemoryStore(ABC):
     @abstractmethod
     def all_cards(self) -> list:
         ...
+
+    @abstractmethod
+    def search(self, query_vector: list, top_k: int) -> list:
+        """向量检索：返回 [(条目, 相似度分数)]，按分数降序、最多 top_k 条。
+        相似度阈值过滤由调用方（retriever）执行——阈值是业务参数，不属于存储层"""
 
 
 class JsonFileMemoryStore(MemoryStore):
@@ -129,6 +141,43 @@ class JsonFileMemoryStore(MemoryStore):
     def all_cards(self) -> list:
         return [MemoryCard(**c) for c in self._load(self.cards_file)]
 
+    def search(self, query_vector: list, top_k: int) -> list:
+        """numpy 向量化余弦检索（万条以内 <5ms；规模化路径 = Qdrant 后端，接口已预留）。
+        维度守卫：与 query 不同维的向量（换 embedding 模型的遗留条目）整条跳过——
+        zip 截断会静默算错分数（评审意见 1），宁可丢一条历史记忆也不返回错误相似度"""
+        items: list = []
+        for n in self.all_notes():
+            if n.vector:
+                items.append((n, n.vector))
+        for c in self.all_cards():
+            if c.vector:
+                items.append((c, c.vector))
+        if not items:
+            return []
+
+        # 维度守卫：维度不符的向量整条剔除
+        dim = len(query_vector)
+        valid = [(item, vec) for item, vec in items if len(vec) == dim]
+        dropped = len(items) - len(valid)
+        if dropped:
+            logger.warning(f"[memory] {dropped} 条记忆向量维度不符（疑似换过 embedding 模型），检索时跳过")
+        if not valid:
+            return []
+
+        # numpy 向量化余弦：query 模长只算一次（评审意见 2），零向量防御除零
+        mat = np.asarray([vec for _, vec in valid], dtype=np.float32)
+        q = np.asarray(query_vector, dtype=np.float32)
+        q_norm = float(np.linalg.norm(q))
+        if q_norm == 0.0:
+            return []
+        row_norms = np.linalg.norm(mat, axis=1)
+        row_norms[row_norms == 0.0] = 1e-12
+        scores = (mat @ q) / (row_norms * q_norm)
+
+        ranked = sorted(zip([item for item, _ in valid], scores.tolist()),
+                        key=lambda x: -x[1])
+        return ranked[:top_k]
+
 
 class SqlMemoryStore(MemoryStore):
     """[接口预留] 对应 store_backend: sqlite 配置位——表结构与序列化方案后续迭代定稿"""
@@ -143,6 +192,9 @@ class SqlMemoryStore(MemoryStore):
         raise NotImplementedError("SqlMemoryStore 尚未实现（06 §3.2 接口预留）")
 
     def all_cards(self) -> list:
+        raise NotImplementedError("SqlMemoryStore 尚未实现（06 §3.2 接口预留）")
+
+    def search(self, query_vector: list, top_k: int) -> list:
         raise NotImplementedError("SqlMemoryStore 尚未实现（06 §3.2 接口预留）")
 
 

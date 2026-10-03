@@ -3,6 +3,8 @@
 【对话历史】
 {conversation_history}
 
+{memory_block}
+
 【本次上下文信息】
 可用数据表信息如下：
 {table_infos}

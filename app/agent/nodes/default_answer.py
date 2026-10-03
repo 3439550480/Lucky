@@ -41,9 +41,20 @@ async def default_answer(state: DataAgentState, runtime: Runtime[DataAgentContex
     fallback_used = False
     try:
         if app_config.features.context_management:
+            # [06 记忆注入] 动态尾部（对话历史之后，06 §3.4 纪律）；long_term 关闭/无记忆 → 空串
+            memory_block = ""
+            if app_config.features.memory.long_term:
+                try:
+                    from app.agent.memory.retriever import retrieve_memory_block
+                    memory_block = await retrieve_memory_block(
+                        query, runtime.context.get("memory_store"),
+                        runtime.context.get("embedding_client"))
+                except Exception as e:
+                    logger.warning(f"[memory] 记忆注入失败（跳过）: {e}")
             chain = PromptTemplate(
                 template=load_prompt("default_answer"),
-                input_variables=["system_prefix", "conversation_history", "query"],
+                input_variables=["system_prefix", "conversation_history",
+                                 "memory_block", "query"],
             ) | llm | StrOutputParser()
             chain_input = {
                 "system_prefix": build_system_prefix(),
@@ -51,6 +62,7 @@ async def default_answer(state: DataAgentState, runtime: Runtime[DataAgentContex
                     f"[{m.get('role')}] {m.get('content', '')}"
                     for m in get_conversation_history(state)
                 ),
+                "memory_block": memory_block,
                 "query": query,
             }
         else:

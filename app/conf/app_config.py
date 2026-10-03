@@ -101,7 +101,7 @@ class MemoryConfig:
     extract_after_run: bool = True       # 运行后提取
     extraction_provider: str = "deepseek"  # 提取提供者（deepseek/qwen/glm）
     retrieval_top_k: int = 5             # 检索 topk
-    similarity_threshold: float = 0.80   # 相似度阈值
+    similarity_threshold: float = 0.60   # 相似度阈值（bge-small-zh 校准：相关非改写对典型 0.6~0.8，0.80 漏召回）
 
 # ====== 所有 dataclass 定义保持不变 ======
 @dataclass
