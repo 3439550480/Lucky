@@ -37,3 +37,4 @@ evaluation/reports/*
 # 记忆库用户数据（06：教学演示的单用户记忆，不入库）
 data/memory/*
 !data/memory/.gitkeep
+_ssh_run.py
