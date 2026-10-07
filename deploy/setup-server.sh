@@ -12,8 +12,19 @@ if ! command -v docker >/dev/null; then
   curl -fsSL https://get.docker.com | sh
 fi
 systemctl enable --now docker
+# 腾讯云内网 registry 镜像加速（docker.io 拉取在国内直连经常失败）
+if [ ! -f /etc/docker/daemon.json ]; then
+  mkdir -p /etc/docker
+  echo '{"registry-mirrors":["https://mirror.ccs.tencentyun.com"]}' > /etc/docker/daemon.json
+  systemctl restart docker
+fi
 
 echo "==== [2/8] 启动依赖服务（mysql/qdrant/es/embedding，无 kibana）===="
+# ghcr.io 直连失败时走 DaoCloud 代理预拉取（embedding 镜像）
+TEI_IMAGE="ghcr.io/huggingface/text-embeddings-inference:cpu-1.8"
+docker image inspect "$TEI_IMAGE" >/dev/null 2>&1 || \
+  docker pull "$TEI_IMAGE"; \
+  (docker pull "docker.m.daocloud.io/$TEI_IMAGE"; docker tag "docker.m.daocloud.io/$TEI_IMAGE" "$TEI_IMAGE")
 docker compose -f docker/docker-compose.prod.yaml up -d
 echo "等待 MySQL 初始化（首次约 40s）..."
 for i in $(seq 1 30); do
