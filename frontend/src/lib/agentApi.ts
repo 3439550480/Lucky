@@ -40,6 +40,12 @@ export function resetThreadId(): void {
   sessionStorage.removeItem("agent_thread_id");
 }
 
+// [Lucky 多会话] 显式设置活跃会话的 thread_id（useSessions 切换/新建会话时调用）；
+// 与 getThreadId 同键——设置后 getThreadId 直接命中，SSE 继续该会话的后端上下文
+export function setThreadId(id: string): void {
+  sessionStorage.setItem("agent_thread_id", id);
+}
+
 // [NEW] 获取可用模型列表（后端从配置读取，前端零硬编码）
 export async function fetchModels(signal?: AbortSignal): Promise<ModelsResponse> {
   const response = await fetch(`${API_BASE_URL}/api/models`, { signal });

@@ -1,7 +1,7 @@
 [project]
-name = "shopkeeper-agent"
-version = "0.1.0"
-description = "Add your description here"
+name = "lucky"
+version = "1.0.0"
+description = "Lucky 智能助手：通用对话 + 问数能力（FastAPI + LangGraph）"
 readme = "README.md"
 requires-python = ">=3.10"   # 改为 3.10 或更高，但不要写 3.14
 dependencies = [

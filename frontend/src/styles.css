@@ -1,62 +1,183 @@
-/**
- * 全局样式入口
- * 加载 Tailwind 层并定义页面基础样式与背景纹理
+﻿/**
+ * 全局样式入口（Lucky 设计系统）
+ * 双主题变量定义 + Tailwind 层 + 基础样式
+ * 机制：:root 为亮色值，html.dark 覆盖为暗色值；变量为 "R G B" 三元组（tailwind 以 rgb(var(--c-x) / alpha) 消费）
  */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-    color-scheme: light;
-    font-synthesis: none;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+  color-scheme: light;
+  --c-bg: 246 248 251;
+  --c-surface: 255 255 255;
+  --c-surface2: 240 243 248;
+  --c-line: 224 229 237;
+  --c-text: 27 32 39;
+  --c-muted: 92 101 114;
+  --c-accent: 47 127 91;
+  --c-accentSoft: 47 127 91;
+  --c-accent2: 180 134 56;
+  --c-danger: 214 78 58;
+  --grain-ink: 32 32 29;
+  --grain-opacity: 0.25;
+}
+
+html.dark {
+  color-scheme: dark;
+  --c-bg: 20 22 26;
+  --c-surface: 28 31 38;
+  --c-surface2: 36 40 51;
+  --c-line: 46 51 64;
+  --c-text: 232 234 240;
+  --c-muted: 154 163 178;
+  --c-accent: 76 195 138;
+  --c-accentSoft: 76 195 138;
+  --c-accent2: 214 175 100;
+  --c-danger: 239 111 90;
+  --grain-ink: 0 0 0;
+  --grain-opacity: 0.35;
+}
+
+:root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 * {
-    box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 html,
 body,
 #root {
-    height: 100%;
+  height: 100%;
 }
 
 body {
-    margin: 0;
-    background: #f7f1e8;
-    overflow: hidden;
+  margin: 0;
+  background: rgb(var(--c-bg));
+  color: rgb(var(--c-text));
+  overflow: hidden;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 button,
 textarea {
-    font: inherit;
+  font: inherit;
 }
 
 ::selection {
-    background: rgba(47, 107, 79, 0.2);
+  background: rgb(var(--c-accent) / 0.22);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--c-line)) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(var(--c-line));
+  border-radius: 3px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .grain {
-    opacity: 0.32;
-    background-image: radial-gradient(
-        circle at 1px 1px,
-        rgba(32, 32, 29, 0.18) 1px,
-        transparent 0
-    );
-    background-size: 18px 18px;
-    mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent 72%);
+  opacity: var(--grain-opacity);
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgb(var(--grain-ink) / 0.18) 1px,
+    transparent 0
+  );
+  background-size: 18px 18px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent 72%);
 }
 
 @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        scroll-behavior: auto !important;
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-    }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
+
+/* ===== Markdown 渲染样式（.md-content，双主题） ===== */
+.md-content > *:first-child { margin-top: 0; }
+.md-content > *:last-child { margin-bottom: 0; }
+.md-content p { margin: 0.5em 0; }
+.md-content h1, .md-content h2, .md-content h3, .md-content h4 {
+  margin: 1em 0 0.4em;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.md-content h1 { font-size: 1.25em; }
+.md-content h2 { font-size: 1.15em; }
+.md-content h3 { font-size: 1.05em; }
+.md-content ul, .md-content ol { margin: 0.5em 0; padding-left: 1.5em; }
+.md-content ul { list-style: disc; }
+.md-content ol { list-style: decimal; }
+.md-content li { margin: 0.25em 0; }
+.md-content a { color: rgb(var(--c-accent)); text-decoration: underline; text-underline-offset: 2px; }
+.md-content blockquote {
+  margin: 0.6em 0;
+  border-left: 3px solid rgb(var(--c-accent) / 0.5);
+  padding: 0.2em 0 0.2em 0.9em;
+  color: rgb(var(--c-muted));
+}
+.md-content code {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 0.88em;
+  background: rgb(var(--c-surface2));
+  border-radius: 4px;
+  padding: 0.15em 0.4em;
+}
+.md-content pre {
+  margin: 0.7em 0;
+  padding: 0.9em 1em;
+  border-radius: 10px;
+  background: rgb(var(--c-surface2));
+  border: 1px solid rgb(var(--c-line));
+  overflow-x: auto;
+}
+.md-content pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+.md-content table {
+  margin: 0.7em 0;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+.md-content th, .md-content td {
+  border: 1px solid rgb(var(--c-line));
+  padding: 0.45em 0.75em;
+  text-align: left;
+}
+.md-content th { background: rgb(var(--c-surface2)); font-weight: 600; }
+.md-content hr { border: none; border-top: 1px solid rgb(var(--c-line)); margin: 1em 0; }
+
+/* ===== highlight.js token 配色（双主题，无额外 CSS 依赖） ===== */
+.hljs { color: rgb(var(--c-text)); background: transparent; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag { color: rgb(var(--c-danger)); }
+.hljs-string, .hljs-regexp, .hljs-addition { color: rgb(var(--c-accent)); }
+.hljs-number, .hljs-symbol, .hljs-bullet { color: rgb(var(--c-accent2)); }
+.hljs-title, .hljs-section, .hljs-name, .hljs-selector-id { color: rgb(var(--c-accent2)); font-weight: 600; }
+.hljs-comment, .hljs-quote { color: rgb(var(--c-muted)); font-style: italic; }
+.hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable { color: rgb(var(--c-accent2)); }
+.hljs-type, .hljs-built_in, .hljs-class .hljs-title { color: rgb(var(--c-accent)); }
+.hljs-deletion { color: rgb(var(--c-danger)); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }

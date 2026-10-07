@@ -1,8 +1,10 @@
-/**
- * 聊天消息气泡组件
- * 组合展示用户问题、智能体回复、执行流程和结果表格
+﻿/**
+ * 聊天消息气泡组件（Lucky）
+ * 组合展示用户问题、智能体回复、执行流程和结果表格；
+ * 解释文本走 Markdown 渲染（GFM + 代码高亮，双主题适配）
  */
 import { Bot, Copy, UserRound } from "lucide-react";
+import { Markdown } from "./Markdown";
 import { ResultTable } from "./ResultTable";
 import { StepRail } from "./StepRail";
 import { cn, formatTime, toClipboardText } from "../lib/format";
@@ -19,7 +21,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
   return (
     <article className={cn("group flex gap-3", isUser && "justify-end")}>
       {!isUser && (
-        <div className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink text-parchment">
+        <div className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-accent to-accent/70 text-white">
           <Bot className="h-4 w-4" aria-hidden="true" />
         </div>
       )}
@@ -27,10 +29,10 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
       <div className={cn("max-w-[920px] flex-1", isUser && "flex max-w-[760px] justify-end")}>
         <div
           className={cn(
-            "relative border px-5 py-4 shadow-line",
+            "relative rounded-xl2 border px-5 py-4 shadow-soft",
             isUser
-              ? "border-ink/80 bg-ink text-parchment"
-              : "border-ink/10 bg-[#fffaf1]/78 text-ink backdrop-blur",
+              ? "border-transparent bg-accent text-white"
+              : "border-line bg-surface text-content",
           )}
         >
           <div className="flex items-start justify-between gap-3">
@@ -39,7 +41,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
               <button
                 type="button"
                 onClick={copy}
-                className="shrink-0 rounded-full p-1.5 text-ink/45 opacity-0 outline-none transition hover:bg-ink/5 hover:text-ink focus:opacity-100 focus:ring-2 focus:ring-moss/40 group-hover:opacity-100"
+                className="shrink-0 rounded-full p-1.5 text-muted opacity-0 outline-none transition hover:bg-surface-2 hover:text-content focus:opacity-100 focus:ring-2 focus:ring-accent/40 group-hover:opacity-100"
                 title="复制"
                 aria-label="复制"
               >
@@ -49,15 +51,15 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
           </div>
 
           {message.error && (
-            <div className="mt-3 border border-tomato/30 bg-tomato/10 px-3 py-2 text-sm text-tomato">
+            <div className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
               {message.error}
             </div>
           )}
 
           {!isUser && <StepRail steps={message.steps} />}
           {!isUser && message.explanation && (
-            <div className="mt-3 rounded-md bg-blue-50 p-3 text-sm text-blue-800 border-l-4 border-blue-500">
-              💡 {message.explanation}
+            <div className="mt-3 rounded-lg border-l-4 border-accent bg-surface-2 px-4 py-3 text-sm leading-6">
+              <Markdown text={message.explanation} />
             </div>
           )}
           {!isUser && message.result !== undefined && <ResultTable data={message.result} />}
@@ -65,7 +67,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
           <div
             className={cn(
               "mt-3 text-xs",
-              isUser ? "text-parchment/55" : "text-ink/45",
+              isUser ? "text-white/60" : "text-muted",
             )}
           >
             {formatTime(message.createdAt)}
@@ -74,7 +76,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
       </div>
 
       {isUser && (
-        <div className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-moss text-white">
+        <div className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-2 text-content">
           <UserRound className="h-4 w-4" aria-hidden="true" />
         </div>
       )}

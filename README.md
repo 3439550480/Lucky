@@ -1,4 +1,4 @@
-﻿# Shopkeeper-Agent
+# Lucky
 
 基于 FastAPI + LangGraph 的通用智能助手平台，核心能力为电商问数（Text2SQL）：
 自然语言提问 → 能力路由 → 多路召回（Qdrant 向量 + ES 全文）→ LLM 生成 SQL → 校验执行 → SSE 流式推送结果与解释。

@@ -1,14 +1,24 @@
-<!--
-  Vite HTML 模板
-  声明页面元信息并挂载 React 应用入口
--->
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f7f1e8" />
-    <title>电商问数 | Shopkeeper Agent</title>
+    <meta name="theme-color" content="#f6f8fb" />
+    <title>Lucky · 智能助手</title>
+    <script>
+      // 防 FOUC：首帧渲染前同步主题（与 lib/theme.ts 的 readTheme 同规则）
+      (function () {
+        try {
+          var saved = localStorage.getItem("lucky_theme");
+          var dark =
+            saved === "dark" ||
+            (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {
+          /* localStorage 不可用时保持亮色 */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

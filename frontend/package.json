@@ -1,6 +1,6 @@
 {
-  "name": "shopkeeper-agent-frontend",
-  "description": "电商问数智能体前端项目，提供聊天式问数界面和 SSE 流程展示。",
+  "name": "lucky-frontend",
+  "description": "Lucky 智能助手前端：通用对话 + 问数能力，SSE 流式交互。",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -14,7 +14,10 @@
     "@vitejs/plugin-react": "^5.1.2",
     "lucide-react": "^0.475.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.10",
