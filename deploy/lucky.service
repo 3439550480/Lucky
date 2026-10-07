@@ -1,0 +1,19 @@
+# Lucky 后端 systemd 服务（deploy 分支）
+# 安装：sudo cp deploy/lucky.service /etc/systemd/system/
+#       sudo systemctl daemon-reload && sudo systemctl enable --now lucky
+# 前提：仓库位于 /opt/lucky，且已执行 uv sync
+[Unit]
+Description=Lucky Agent Backend (FastAPI + LangGraph)
+After=network.target docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/lucky
+ExecStart=/opt/lucky/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+# 日志进 journald：journalctl -u lucky -f
+
+[Install]
+WantedBy=multi-user.target

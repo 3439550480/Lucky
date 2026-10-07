@@ -1,0 +1,77 @@
+﻿# 生产部署 compose（deploy 分支专用，服务器 2核4G 配置）
+# 与开发版差异：
+#   1. 去掉 kibana（纯调试工具，省 1GB+ 内存）
+#   2. 所有端口只绑 127.0.0.1 —— mysql/qdrant/es/embedding 绝不暴露公网，
+#      只有宿主机上的 Lucky 后端与 nginx 可达
+#   3. ES 保持 256m heap / 512m limit（低配服务器验证过的安全水位）
+# 用法：docker compose -f docker/docker-compose.prod.yaml up -d
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "@Lzs0825"
+      MYSQL_USER: lzs
+      MYSQL_PASSWORD: Lzs666
+      LANG: C.UTF-8
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql:/docker-entrypoint-initdb.d
+    command:
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_general_ci
+      --skip-character-set-client-handshake
+
+  elasticsearch:
+    build: ./elasticsearch
+    container_name: elasticsearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms256m -Xmx256m"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  qdrant:
+    image: qdrant/qdrant:v1.18.0
+    container_name: qdrant
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    ports:
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  embedding:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
+    platform: linux/amd64
+    container_name: embedding
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:80"
+    environment:
+      MODEL_ID: /models/bge-small-zh
+      MAX_CONCURRENT_REQUESTS: "2"
+      MAX_BATCH_TOKENS: "4096"
+      OPENAI_COMPATIBLE: "true"
+    volumes:
+      - ./embedding/bge-small-zh:/models/bge-small-zh
+
+volumes:
+  mysql_data:
+  es_data:
+  qdrant_data:

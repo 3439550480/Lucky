@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f6f8fb" />
+    <title>Lucky · 智能助手</title>
+    <script>
+      // 防 FOUC：首帧渲染前同步主题（与 lib/theme.ts 的 readTheme 同规则）
+      (function () {
+        try {
+          var saved = localStorage.getItem("lucky_theme");
+          var dark =
+            saved === "dark" ||
+            (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {
+          /* localStorage 不可用时保持亮色 */
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-BeYrxB73.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-27blLGXu.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
