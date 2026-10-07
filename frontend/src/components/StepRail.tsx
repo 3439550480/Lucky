@@ -91,10 +91,10 @@ function FlowNodeCard({ node, status }: { node: FlowNode; status: FlowStatus }) 
       <div
         className={cn(
           "flex h-10 items-center gap-2 border px-3 text-sm font-semibold shadow-line transition",
-          status === "pending" && "border-ink/10 bg-white/55 text-ink/45",
-          status === "running" && "border-brass/45 bg-brass/15 text-ink",
-          status === "success" && "border-moss/25 bg-moss/10 text-ink",
-          status === "error" && "border-tomato/35 bg-tomato/10 text-tomato",
+          status === "pending" && "border-line bg-surface-2/60 text-muted",
+          status === "running" && "border-accent2/45 bg-accent2/15 text-content",
+          status === "success" && "border-accent/25 bg-accent/10 text-content",
+          status === "error" && "border-danger/35 bg-danger/10 text-danger",
         )}
       >
         <span
@@ -124,16 +124,16 @@ export function StepRail({ steps = [] }: { steps?: StepState[] }) {
   const statusMap = getStatusMap(steps);
 
   return (
-    <section className="mt-4 border border-ink/10 bg-white/40 px-3 py-4 shadow-line">
+    <section className="mt-4 rounded-xl2 border border-line bg-surface-2/30 px-3 py-4">
       <div className="mb-3 flex items-center justify-between gap-3 px-1">
-        <div className="text-sm font-semibold text-ink">执行流程</div>
-        <div className="text-xs text-ink/45">LangGraph</div>
+        <div className="text-sm font-semibold text-content">执行流程</div>
+        <div className="text-xs text-muted">LangGraph</div>
       </div>
 
       <div className="overflow-x-auto">
         <div className="relative mx-auto h-[780px] w-[820px]">
           <svg
-            className="pointer-events-none absolute inset-0 h-full w-full"
+            className="pointer-events-none absolute inset-0 h-full w-full text-muted"
             viewBox="0 0 820 780"
             fill="none"
             aria-hidden="true"
@@ -154,7 +154,7 @@ export function StepRail({ steps = [] }: { steps?: StepState[] }) {
               <path
                 key={path}
                 d={path}
-                stroke="rgba(32,32,29,0.5)"
+                stroke="currentColor"
                 strokeWidth="1.5"
                 markerEnd="url(#flow-arrow)"
               />

@@ -1,7 +1,8 @@
-/**
- * 聊天输入区组件（02 文档 §3.5/§3.7）
+﻿/**
+ * 聊天输入区组件（02 文档 §3.5/§3.7 · Lucky 语义 token 版）
  * 职责：问题输入、发送/停止、模型选择（上拉弹层）、能力芯片（tier-0 模式开关）
  * 数据来源：models/capabilities 全部由 App.tsx 从后端拉取后经 props 传入 —— 组件不硬编码
+ * 视觉：全部使用语义 token（bg/surface/surface-2/line/content/muted/accent/danger），双主题自适应
  */
 import { ArrowUp, Check, ChevronUp, Search, Square, WandSparkles } from "lucide-react";
 import {
@@ -80,8 +81,8 @@ export function Composer({
   };
 
   return (
-    <div className="border-t border-ink/10 bg-parchment/80 px-4 py-4 backdrop-blur">
-      {/* 能力芯片行（输入框上方，用户指定位置）：selectable=true 的能力，持续选中模式 */}
+    <div className="border-t border-line bg-surface/80 px-4 py-4 backdrop-blur">
+      {/* 能力芯片行（输入框上方）：selectable=true 的能力，持续选中模式 */}
       {capabilities.length > 0 && (
         <div className="mx-auto mb-2 flex max-w-5xl gap-2">
           {capabilities.map((cap) => {
@@ -94,10 +95,10 @@ export function Composer({
                 disabled={isStreaming}
                 onClick={() => onCapabilityChange(active ? "" : cap.name)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md border px-3 py-1 text-sm transition",
+                  "flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition",
                   active
-                    ? "border-moss bg-moss/15 text-moss"
-                    : "border-ink/15 bg-white/60 text-ink/60 hover:border-ink/30",
+                    ? "border-accent bg-accent/12 text-accent"
+                    : "border-line bg-surface text-muted hover:border-accent/40 hover:text-content",
                 )}
               >
                 <Search className="h-3.5 w-3.5" aria-hidden="true" />
@@ -109,7 +110,7 @@ export function Composer({
       )}
 
       <form onSubmit={submit}>
-        <div className="relative mx-auto flex max-w-5xl items-end gap-3 border border-ink/15 bg-white/75 p-2 shadow-panel">
+        <div className="relative mx-auto flex max-w-5xl items-end gap-2 rounded-xl2 border border-line bg-surface p-2 shadow-soft">
           {/* 模型选择按钮 + 上拉弹层（数据源 /api/models，前端零硬编码） */}
           {models.length > 0 && (
             <div ref={modelBoxRef} className="relative shrink-0">
@@ -119,7 +120,7 @@ export function Composer({
                 aria-expanded={modelPanelOpen}
                 disabled={isStreaming}
                 onClick={() => setModelPanelOpen((open) => !open)}
-                className="flex h-11 items-center gap-1 bg-ink/5 px-2 text-sm text-ink/70 hover:bg-ink/10"
+                className="flex h-11 items-center gap-1 rounded-lg bg-surface-2 px-2.5 text-sm text-muted transition hover:text-content disabled:opacity-50"
                 title={selectedInfo ? `模型：${selectedInfo.model}` : "选择模型"}
               >
                 <WandSparkles className="h-4 w-4" aria-hidden="true" />
@@ -132,11 +133,11 @@ export function Composer({
               {modelPanelOpen && (
                 <div
                   role="listbox"
-                  className="absolute bottom-full left-0 z-20 mb-2 max-h-72 w-64 overflow-y-auto border border-ink/15 bg-white shadow-panel"
+                  className="absolute bottom-full left-0 z-20 mb-2 max-h-72 w-64 overflow-y-auto rounded-xl2 border border-line bg-surface py-1 shadow-panel"
                 >
                   {Object.entries(groups).map(([group, items]) => (
                     <div key={group}>
-                      <div className="bg-ink/5 px-3 py-1 text-xs text-ink/50">{group}</div>
+                      <div className="bg-surface-2/70 px-3 py-1 text-xs text-muted">{group}</div>
                       {items.map((m) => {
                         const active = m.name === selectedModel;
                         return (
@@ -148,8 +149,8 @@ export function Composer({
                             title={m.model}
                             onClick={() => { onModelChange(m.name); setModelPanelOpen(false); }}
                             className={cn(
-                              "flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-ink/5",
-                              active && "text-moss",
+                              "flex w-full items-center justify-between px-3 py-2 text-left text-sm text-content transition hover:bg-surface-2",
+                              active && "text-accent",
                             )}
                           >
                             <span>{m.model}</span>
@@ -170,18 +171,18 @@ export function Composer({
             onChange={(event) => onChange(event.target.value)}
             onKeyDown={onKeyDown}
             rows={1}
-            placeholder="问一个电商数据问题..."
-            className="max-h-36 min-h-11 flex-1 resize-none bg-transparent px-2 py-3 text-[15px] leading-6 text-ink outline-none placeholder:text-ink/35"
+            placeholder="输入你的问题..."
+            className="max-h-36 min-h-11 flex-1 resize-none bg-transparent px-2 py-3 text-[15px] leading-6 text-content outline-none placeholder:text-muted/70"
           />
           <button
             type={isStreaming ? "button" : "submit"}
             onClick={isStreaming ? onStop : undefined}
             disabled={!isStreaming && disabled}
             className={cn(
-              "grid h-11 w-11 shrink-0 place-items-center rounded-full text-white transition focus:outline-none focus:ring-2 focus:ring-moss/40 focus:ring-offset-2",
+              "grid h-11 w-11 shrink-0 place-items-center rounded-full text-white transition focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-2 focus:ring-offset-surface",
               isStreaming
-                ? "bg-tomato hover:bg-tomato/90"
-                : "bg-ink hover:bg-soot disabled:cursor-not-allowed disabled:bg-ink/25",
+                ? "bg-danger hover:bg-danger/90"
+                : "bg-accent hover:bg-accent/85 disabled:cursor-not-allowed disabled:opacity-40",
             )}
             title={isStreaming ? "停止" : "发送"}
             aria-label={isStreaming ? "停止" : "发送"}

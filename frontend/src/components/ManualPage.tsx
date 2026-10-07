@@ -16,7 +16,7 @@ const ManualPage: React.FC<ManualPageProps> = ({ onClose }) => {
             📘
           </div>
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-ink">电商问数操作手册</div>
+            <div className="truncate text-sm font-semibold text-ink">Lucky 操作手册</div>
             <div className="truncate text-xs text-ink/45">帮助文档</div>
           </div>
         </div>
