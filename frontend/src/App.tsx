@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Lucky 前端应用主组件
  * 聊天会话状态（多会话）· SSE 事件消费 · 整体布局
  * 视觉：语义 token（tailwind 语义色）+ 亮/暗双主题
@@ -13,7 +13,7 @@ import ThemeToggle from "./components/ThemeToggle";
 import ManualPage from "./components/ManualPage";
 import { streamQuery } from "./lib/agentApi";
 import { fetchCapabilities, fetchModels, isAbortError } from "./lib/agentApi";
-import { cn, summarizeResult } from "./lib/format";
+import { cn, summarizeResult, uuid } from "./lib/format";
 import { useSessions } from "./lib/useSessions";
 import { useTheme } from "./lib/theme";
 import type { AgentEvent, CapabilityInfo, ChatMessage, ModelInfo, StepState } from "./types/agent";
@@ -29,7 +29,7 @@ const examples = [
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "Vite /api proxy";
 
 function makeId() {
-  return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return uuid();
 }
 
 function upsertStep(steps: StepState[] = [], event: Extract<AgentEvent, { type: "progress" }>) {

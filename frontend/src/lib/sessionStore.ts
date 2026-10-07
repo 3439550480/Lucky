@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 多会话持久化（Lucky 会话侧栏的数据层）
  *
  * 存储：localStorage
@@ -7,6 +7,7 @@
  * 活跃会话 id 存 sessionStorage("agent_thread_id")——与 agentApi 的 thread_id 同键同源，
  * 每个标签页可以有自己正在使用的会话（保持 02 文档"thread_id=标签页隔离"语义）
  */
+import { uuid } from "./format";
 import type { ChatMessage } from "../types/agent";
 
 export interface SessionMeta {
@@ -34,7 +35,7 @@ export function persistSessions(list: SessionMeta[]): void {
 }
 
 export function createSessionMeta(title = "新对话"): SessionMeta {
-  return { id: crypto.randomUUID(), title, createdAt: Date.now(), updatedAt: Date.now() };
+  return { id: uuid(), title, createdAt: Date.now(), updatedAt: Date.now() };
 }
 
 export function loadMessages(id: string): ChatMessage[] {

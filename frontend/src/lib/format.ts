@@ -6,6 +6,20 @@ export function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
+/**
+ * 安全 UUID 生成：crypto.randomUUID 仅在 secure context（HTTPS/localhost）可用，
+ * HTTP 明文 + 公网 IP 部署下为 undefined——提供 Math.random 兜底
+ */
+export function uuid(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 export function formatTime(timestamp: number) {
   return new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",

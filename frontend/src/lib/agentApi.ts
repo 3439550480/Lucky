@@ -3,6 +3,7 @@
  * 封装后端 /api/query SSE 流式接口请求与事件解析逻辑，
  * 以及模型列表 / 能力芯片列表的获取（02 文档 §3.4）。
  */
+import { uuid } from "./format";
 import type { AgentEvent, CapabilitiesResponse, ModelsResponse } from "../types/agent";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "";
@@ -29,7 +30,7 @@ export function isAbortError(error: unknown): boolean {
 function getThreadId(): string {
   let threadId = sessionStorage.getItem("agent_thread_id");
   if (!threadId) {
-    threadId = crypto.randomUUID();
+    threadId = uuid();
     sessionStorage.setItem("agent_thread_id", threadId);
   }
   return threadId;
