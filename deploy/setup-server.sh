@@ -60,12 +60,21 @@ if [ ! -f .env ]; grep -q "填入" .env; then
 fi
 
 echo "==== [5/8] 后端依赖安装 ===="
+# ⚠️ langgraph 1.2.2 的 stream_writer 在 Python 3.10 上有 contextvar 兼容 bug
+#    （get_config outside runnable context），必须用 3.14。服务器安装流程：
+#    本地下载 tarball 后 SFTP 上传解压到 /opt/py314（见 deploy/README.md §0.5）
+if [ ! -x /opt/py314/bin/python3.14 ]; then
+  echo "❌ 缺 /opt/py314/bin/python3.14 —— 按 README §0.5 先安装 Python 3.14 再重跑"
+  exit 1
+fi
 if ! command -v uv >/dev/null; then curl -LsSf https://astral.sh/uv/install.sh | sh; fi
 export PATH="$HOME/.local/bin:$PATH"
-uv sync
+# asyncmy 在 cp314-Linux 无预编译轮子，源码构建需要 clang
+command -v clang >/dev/null; apt-get install -y -qq clang >/dev/null
+uv sync --python /opt/py314/bin/python3.14 --index-url https://mirrors.aliyun.com/pypi/simple/
 
 echo "==== [6/8] 重建元数据知识库（meta 数据行 + Qdrant + ES 取值索引）===="
-uv run python -m app.scripts.build_meta_knowledge
+uv run --python /opt/py314/bin/python3.14 python -m app.scripts.build_meta_knowledge
 
 echo "==== [7/8] nginx + 访问控制 ===="
 apt-get update -qq && apt-get install -y -qq nginx apache2-utils >/dev/null

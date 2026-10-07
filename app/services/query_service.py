@@ -119,6 +119,7 @@ class QueryService:
                 # SSE 要求每条消息以 data: 开头，并以两个换行符结束
                 yield f"data: {json.dumps(chunk, ensure_ascii=False, default=str)}\n\n"
         except Exception as e:
+            logger.exception("查询链路异常")   # loguru：完整堆栈进日志（SSE 只透出 message）
             # 流式接口已经开始返回后不能再改 HTTP 状态码，因此把异常也包装成一条 SSE 消息
             error = {"type": "error", "message": str(e)}
             if holder.value:

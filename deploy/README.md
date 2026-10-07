@@ -15,6 +15,25 @@ Docker（全部只绑 127.0.0.1，不出公网）：mysql(3307) · qdrant(6333) 
 
 ## 部署步骤（Xshell 里逐条执行）
 
+### 0.5 前置：安装 Python 3.14 到 /opt/py314（必读）
+
+langgraph 1.2.2 的 stream_writer 在 Python 3.10 上存在 contextvar 兼容 bug
+（报错 `Called get_config outside of a runnable context`），**必须用 Python ≥3.14**。
+系统源没有 3.14，且国内无法直连 uv 的下载源，需手动安装：
+
+1. 本地（Windows，可直连 GitHub）下载 Linux 版解释器：
+   ```
+   curl -L -o %TEMP%\py314.tar.gz "https://github.com/indygreg/python-build-standalone/releases/download/20261003/cpython-3.14.8%2B20261003-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+   ```
+2. Xftp / `rz` 上传到服务器 `/tmp/py314.tar.gz`，然后在服务器执行：
+   ```bash
+   sudo mkdir -p /opt/py314 && sudo tar -xzf /tmp/py314.tar.gz -C /opt/py314 --strip-components=1
+   sudo chown -R $USER:$USER /opt/py314
+   /opt/py314/bin/python3.14 --version   # 应输出 Python 3.14.8
+   ```
+
+另：`asyncmy` 在 Linux + cp314 无预编译轮子，`setup-server.sh` 会自动安装 clang 完成源码编译（已内置，无需手动）。
+
 ### 0. 前置：腾讯云控制台
 - 安全组放行 **80 端口**（TCP，0.0.0.0/0）
 - 确认实例是 Ubuntu 22.04+，拥有 sudo 权限的账户
