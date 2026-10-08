@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lucky v1.1 · 作品集化冲刺 PRD</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2129; --border:#30363d;
+    --text:#e6edf3; --muted:#9aa7b3; --dim:#6e7a86;
+    --blue:#58a6ff; --green:#3fb950; --yellow:#d29922; --red:#f85149; --purple:#bc8cff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.65;padding:32px 16px 64px}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:25px;margin-bottom:4px}
+  h2{font-size:19px;margin:44px 0 14px;padding-left:12px;border-left:3px solid var(--blue)}
+  h3{font-size:15px;margin:16px 0 8px;color:var(--blue)}
+  h4{font-size:13.5px;margin:12px 0 6px;color:var(--muted)}
+  p{margin:8px 0;font-size:13.5px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .meta{color:var(--dim);font-size:12px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:10px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  @media(max-width:760px){.grid2,.grid3{grid-template-columns:1fr}}
+  .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:10px;border:1px solid var(--border);color:var(--muted);margin-right:6px;white-space:nowrap}
+  .tag.g{color:var(--green);border-color:rgba(63,185,80,.4)}
+  .tag.y{color:var(--yellow);border-color:rgba(210,153,34,.4)}
+  .tag.b{color:var(--blue);border-color:rgba(88,166,255,.4)}
+  .tag.r{color:var(--red);border-color:rgba(248,81,73,.4)}
+  .tag.p{color:var(--purple);border-color:rgba(188,140,255,.4)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin:10px 0}
+  th{background:var(--panel2);color:var(--muted);text-align:left;font-weight:600}
+  th,td{border:1px solid var(--border);padding:7px 9px;vertical-align:top}
+  tr:hover td{background:rgba(88,166,255,.04)}
+  .tbl-scroll{overflow-x:auto}
+  .hl{color:var(--green);font-weight:600}
+  .hl-b{color:var(--blue);font-weight:600}
+  .hl-y{color:var(--yellow);font-weight:600}
+  .hl-r{color:var(--red);font-weight:600}
+  .hl-p{color:var(--purple);font-weight:600}
+  .quote{border-left:3px solid var(--purple);background:rgba(188,140,255,.06);padding:10px 14px;border-radius:0 8px 8px 0;margin:10px 0;font-size:13px}
+  ul{padding-left:20px;margin:6px 0}
+  li{margin:3px 0;font-size:13px}
+  li::marker{color:var(--blue)}
+  ol{padding-left:22px;margin:6px 0}
+  ol li{margin:3px 0;font-size:13px}
+  code{background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:0 5px;font-size:12px;color:#79c0ff;font-family:Consolas,monospace}
+  .gwt{background:var(--panel2);border-radius:8px;padding:10px 12px;margin:8px 0;font-size:12.5px}
+  .gwt b{color:var(--muted);font-weight:600}
+  .gwt div{margin:2px 0}
+  .fr{border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin:12px 0;background:var(--panel)}
+  .fr-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:6px}
+  .fr-head .id{font-weight:700;color:var(--blue);font-size:14px}
+  .fr-head .name{font-weight:600;font-size:14px}
+  .accept{font-size:12px;color:var(--dim);background:rgba(63,185,80,.06);border:1px solid rgba(63,185,80,.25);border-radius:6px;padding:5px 10px;margin-top:8px}
+  .accept b{color:var(--green)}
+  .toc{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin:16px 0;column-count:2;column-gap:30px;font-size:13px}
+  @media(max-width:640px){.toc{column-count:1}}
+  .toc a{color:var(--muted);text-decoration:none;display:block;margin:3px 0;break-inside:avoid}
+  .toc a:hover{color:var(--blue)}
+  .toc b{color:var(--text)}
+  .conclusion{background:linear-gradient(135deg,rgba(88,166,255,.10),rgba(63,185,80,.08));border:1px solid rgba(88,166,255,.35);border-radius:12px;padding:14px 18px;margin:14px 0;font-size:13.5px}
+  .footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--border);color:var(--dim);font-size:12px}
+  .small{font-size:12px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="small">PRD · Lucky Portfolio Sprint · 2026-10-08</div>
+  <h1>Lucky v1.1 · 作品集化冲刺 产品需求文档</h1>
+  <div class="sub">项目仓库：github.com/3439550480/Lucky · 文档依据：定位分析报告（2026-10-08）+ 仓库设计文档 00~07</div>
+
+  <div class="conclusion">
+    <b>一句话定位：</b>Lucky 是一个基于 FastAPI + LangGraph 的电商问数 Agent 工程范本。v1.1 的目标是把已验收的工程能力（五级能力路由 / 上下文管理 / 长期记忆 / 量化评估）转化为<b>可在线访问、可 10 分钟复现、可量化讲述</b>的作品集级项目。
+  </div>
+
+  <div class="toc">
+    <a href="#s1"><b>一、文档信息</b></a>
+    <a href="#s2"><b>二、背景与目标</b></a>
+    <a href="#s3"><b>三、名词与术语定义</b></a>
+    <a href="#s4"><b>四、需求范围</b></a>
+    <a href="#s5"><b>五、方案对比与选型说明</b></a>
+    <a href="#s6"><b>六、用户角色与使用场景</b></a>
+    <a href="#s7"><b>七、功能需求（FR-01~15）</b></a>
+    <a href="#s8"><b>八、非功能需求</b></a>
+    <a href="#s9"><b>九、业务流程与状态流转</b></a>
+    <a href="#s10"><b>十、数据与埋点需求</b></a>
+    <a href="#s11"><b>十一、权限与安全要求</b></a>
+    <a href="#s12"><b>十二、异常处理清单</b></a>
+    <a href="#s13"><b>十三、上线计划、依赖与上线后验证</b></a>
+    <a href="#s14"><b>十四、风险与遗留问题</b></a>
+    <a href="#s15"><b>十五、附录（RTM / 用户故事 / 演示题库）</b></a>
+  </div>
+
+  <!-- ================= 一 ================= -->
+  <h2 id="s1">一、文档信息</h2>
+  <div class="tbl-scroll"><table>
+    <tr><th style="width:110px">项</th><th>内容</th></tr>
+    <tr><td>文档版本</td><td>v1.0（首稿）</td></tr>
+    <tr><td>日期</td><td>2026-10-08</td></tr>
+    <tr><td>作者</td><td>司南（产品经理 Agent）× 项目所有者</td></tr>
+    <tr><td>评审状态</td><td>待评审（评审人：项目所有者；通过后进入排期执行）</td></tr>
+    <tr><td>输入材料</td><td>① 定位分析报告（2026-10-08）；② 仓库 README 与 docs/design/00~07（全部 final）；③ 已确认决策：A 作品集主轴 + D 实验亮点 / 每周 15h+ / 有服务器无域名</td></tr>
+    <tr><td>变更记录</td><td>v1.0：基于定位分析报告展开首稿（2026-10-08）</td></tr>
+  </table></div>
+
+  <h4>已确认决策（输入，不再讨论）</h4>
+  <ul>
+    <li>D1 主航道 = <span class="hl">A 作品集主轴 + D 实验亮点</span>（B 真实产品 / C 开源为后续升级选项）</li>
+    <li>D2 投入强度 = <span class="hl">每周 15 小时以上</span>，总周期约 4-5 周（2026-10-08 → 2026-11-09）</li>
+    <li>D3 部署资源 = <span class="hl">有服务器、无域名</span>，HTTPS 走免费子域名方案（详见选型 1）</li>
+  </ul>
+
+  <h4>遗留待拍板（不阻塞排期，触发对应 FR 时必须先定）</h4>
+  <ul>
+    <li>P1 演示数据集题材（默认假设：连锁奶茶店，见选型 4）</li>
+    <li>P2 是否购入正式域名（默认假设：不购入，用 sslip.io；W1 第一天验证证书签发，失败则触发购买）</li>
+    <li>P3 仓库中 <code>.codebuddy/plans</code> 目录去留（建议：移出版本库加入 .gitignore，本地保留；W3 前定）</li>
+  </ul>
+
+  <!-- ================= 二 ================= -->
+  <h2 id="s2">二、背景与目标</h2>
+
+  <h3>2.1 背景</h3>
+  <p>Lucky v1 于 2026-10-03 完成七模块总验收（LLM 多模型工厂 / 模型选择 / 评估框架 / 能力路由 / 上下文管理 / 记忆管理 / Feature Flags），10-07 完成前端双主题升级并出现公网部署动作（修复 HTTP 非安全上下文白屏）。当前问题不是工程不达标，而是 <span class="hl-y">v1 冲刺结束后进入路线真空期</span>：README 自称"通用智能助手平台"与实际能力（问数 + 兜底闲聊）存在名实落差；项目缺少"陌生人可理解、可复现、可在线访问"的作品集交付面。</p>
+
+  <h3>2.2 要解决的问题</h3>
+  <ol>
+    <li><b>看不见</b>：项目只能 clone 本地跑，无在线 demo，外部受众（面试官/同行）触达成本高。</li>
+    <li><b>跑不动</b>：启动依赖 docker/uv/pnpm/三个密钥/建库五步，无一键脚本，陌生人复现失败率高。</li>
+    <li><b>讲不清</b>：评估框架产出的报告是 CLI/JSON，技术亮点（KV cache 收益、路由扩展性）缺少可视化与叙事载体。</li>
+    <li><b>名不实</b>：README 定位口径过宽，同行一眼识破落差，损害专业可信度。</li>
+  </ol>
+
+  <h3>2.3 成功指标与口径</h3>
+  <div class="tbl-scroll"><table>
+    <tr><th style="width:60px">编号</th><th>指标</th><th>目标值</th><th>口径与来源</th></tr>
+    <tr><td>K1</td><td><b>北极星：陌生人自助成功率</b></td><td>≥80%</td><td>真实陌生人（未接触过项目）按 README + 一键脚本操作，10 分钟内完成一次成功问数的人次 ÷ 总人次；首期抽样 n≥3，未达标则归因修订后重测</td></tr>
+    <tr><td>K2</td><td>在线 demo 可用率</td><td>≥95%/月</td><td>每日 1 次脚本探测 HTTPS 200 + 首页元素渲染，月度成功探测 ÷ 总探测；<span class="meta">估算：上线后第一个自然月起统计</span></td></tr>
+    <tr><td>K3</td><td>README 理解率</td><td>n≥3 定性通过</td><td>陌生人只读 README 5 分钟后能复述"做什么 / 怎么跑 / 三个技术亮点"</td></tr>
+    <tr><td>K4</td><td>演示问题可用率</td><td>100%</td><td>预设演示题库每题 SQL 可执行 + 结果与人工核对答案一致（FR-06）</td></tr>
+    <tr><td>K5</td><td>新能力零改图</td><td>0 行改动</td><td>图表能力（FR-09）接入时，<code>app/agent/graph.py</code> 问数子图 19 节点内部 diff 为 0，以 git diff 审查为准</td></tr>
+    <tr><td>K6</td><td>技术叙事产出</td><td>1 博客 + 3 简历句</td><td>博客发布（自建页面或平台均可）；简历句每条含量化数字且数字可溯源到评估报告</td></tr>
+  </table></div>
+  <p class="small">护栏指标：演示问题端到端耗时 P50 ≤15s、P95 ≤25s（口径：提问发出至 SSE result 帧完整接收）；公网 demo 密钥费用不超预算阈值（FR-05/十一节）。护栏未达标不影响 K1-K6 判定，但必须归因并列入下期。</p>
+
+  <!-- ================= 三 ================= -->
+  <h2 id="s3">三、名词与术语定义</h2>
+  <div class="tbl-scroll"><table>
+    <tr><th style="width:170px">术语</th><th>定义</th></tr>
+    <tr><td>Lucky</td><td>本项目的运行代号，FastAPI + LangGraph 智能助手平台，核心能力电商问数（Text2SQL）</td></tr>
+    <tr><td>能力（Capability）</td><td>路由层的分发单元；v1 注册表仅 <code>dataquery</code>（问数）/ <code>default</code>（兜底闲聊）；本期新增 <code>chart</code>（图表生成）</td></tr>
+    <tr><td>五级递进路由</td><td>tier0 前端芯片 → 规则快路径（正则，0 token）→ embedding 相似度 → LLM 分类 → default 兜底</td></tr>
+    <tr><td>零改图路径</td><td>新能力通过"注册表登记 → 路由分发 → 独立子图/节点"接入，不修改问数子图 19 节点内部逻辑的接入方式</td></tr>
+    <tr><td>轨迹（Trajectory）</td><td>单次会话（<code>thread_id</code>）的完整对话记录，短期记忆的项目内命名，存储与生命周期归 M5 上下文管理</td></tr>
+    <tr><td>Feature Flags</td><td><code>conf/app_config.yaml</code> <code>features:</code> 段的全局开关；铁律：关闭 = 改造前旧行为，只在模块边界生效</td></tr>
+    <tr><td>SSE 事件协议</td><td>前后端事件契约（00 文档第五节）；本期新增事件类型须遵守向后兼容规则（允许新增，禁止修改已发布语义）</td></tr>
+    <tr><td>演示问题（Demo Question）</td><td>预置的、结果具备"直觉反差"的问数问题及标准答案，用于 3/10 分钟演示脚本</td></tr>
+    <tr><td>陌生人测试</td><td>邀请未接触过项目的人按 README 独立操作并记录成功/卡点的验证方法</td></tr>
+    <tr><td>sslip.io / nip.io</td><td>免费泛域名服务，把 <code>&lt;IP&gt;.sslip.io</code> 解析回该 IP，配合 Caddy 可为无域名服务器签发 Let's Encrypt 证书</td></tr>
+    <tr><td>GWT</td><td>Given / When / Then 验收标准格式</td></tr>
+  </table></div>
+
+  <!-- ================= 四 ================= -->
+  <h2 id="s4">四、需求范围</h2>
+
+  <h3>4.1 本期包含（v1.1）</h3>
+  <div class="tbl-scroll"><table>
+    <tr><th style="width:90px">阶段</th><th>范围</th><th>对应 FR</th></tr>
+    <tr><td>Phase 0<br>定位收敛</td><td>一键启动脚本；README 定位降调首改；安全清理（凭据轮换 + git 历史扫描 + 密钥防复发）；.env 指引</td><td>FR-01 ~ FR-04</td></tr>
+    <tr><td>Phase 1<br>可演示性</td><td>HTTPS 部署固化（服务器）；演示数据集替换与演示题库；兜底体验打磨；3/10 分钟演示脚本</td><td>FR-05 ~ FR-08</td></tr>
+    <tr><td>Phase 2<br>亮点做深</td><td>第三能力 chart 落地（零改图）；评估报告可视化页；KV cache 对照实验；版本标签与 CHANGELOG</td><td>FR-09 ~ FR-12</td></tr>
+    <tr><td>Phase 3<br>包装放大</td><td>README 终版（双语+GIF）；技术博客 1 篇；简历成果句 3 条</td><td>FR-13 ~ FR-15</td></tr>
+  </table></div>
+
+  <h3>4.2 本期不包含（明确不做，防范围蔓延）</h3>
+  <ul>
+    <li><b>不做</b>真实用户接入与真实商业数据源（B 路线触发条件见 5.4 演进路径）</li>
+    <li><b>不做</b>用户账号体系、多租户、细粒度权限矩阵（公网 demo 走"公开只读"模型）</li>
+    <li><b>不做</b>数据下钻能力、饼图/散点等扩展图型（chart 能力本期仅柱状 + 折线两种）</li>
+    <li><b>不做</b>开源社区运营动作（CONTRIBUTING / Issue 模板 / 英文文档全量化）</li>
+    <li><b>不做</b>更换 embedding 模型、不动 Qdrant 512 维约定（沿袭 00 文档红线）</li>
+    <li><b>不做</b>移动端专属适配（响应式已有基础，仅保证桌面浏览器体验）</li>
+    <li><b>不做</b>CI 流水线（沿用仓库既有评估脚本与验收手册作为回归手段）</li>
+  </ul>
+
+  <!-- ================= 五 ================= -->
+  <h2 id="s5">五、方案对比与选型说明</h2>
+
+  <h3>5.1 主航道选型（引用已定结论）</h3>
+  <p>四路径（A 作品集 / B 真实产品 / C 开源 / D 实验平台）对比已于定位分析报告完成，结论：<span class="hl">A 主轴 + D 亮点</span>。核心理由：仓库的评估框架与验收体系是个人项目稀缺资产，只有作品集叙事能将其变现；D 的第一个实验（图表能力）同时是 A 的最佳技术证明。</p>
+
+  <h3>5.2 本期关键技术选型</h3>
+
+  <h4>选型 1：HTTPS 接入方案（D3 输入：有服务器、无域名）</h4>
+  <div class="tbl-scroll"><table>
+    <tr><th>方案</th><th>成本</th><th>效果</th><th>风险</th><th>结论</th></tr>
+    <tr><td><b>Caddy + sslip.io 免费子域名</b></td><td>零费用，配置约 10 行 Caddyfile</td><td>自动签发续期 Let's Encrypt 证书，浏览器无告警</td><td>第三方泛域名依赖；极端网络下签发可能失败</td><td><span class="hl">推荐（默认）</span>；W1 首日验证，失败即切方案 2</td></tr>
+    <tr><td>购入正式域名 + Caddy</td><td>约 ¥30-80/年 + 15 分钟配置</td><td>简历链接更体面，长期稳定</td><td>需实名与解析等待</td><td>备选；P2 拍板后随时可切</td></tr>
+    <tr><td>自签证书</td><td>低</td><td>浏览器红色告警，演示观感差</td><td>—</td><td>拒绝</td></tr>
+    <tr><td>维持纯 HTTP + 已有 UUID 兜底</td><td>零</td><td>不解决 secure context 根因</td><td>明文传输；观感差</td><td>拒绝</td></tr>
+  </table></div>
+
+  <h4>选型 2：图表能力实现路径（FR-09）</h4>
+  <div class="tbl-scroll"><table>
+    <tr><th>方案</th><th>实现方式</th><th>与架构契约的契合度</th><th>结论</th></tr>
+    <tr><td><b>后端出 chart spec，前端渲染</b></td><td>dataquery 取数后新增 chart_spec 生成节点（独立于 19 节点主链，路由分发层挂载）；SSE 新增 <code>chart</code> 事件类型（<code>{type:"chart", chart_type, x, y, summary}</code>）；前端复用现有主题渲染</td><td><span class="hl">完全契合</span>：走"注册表 + 零改图"；事件新增 type 符合协议兼容规则（允许新增）；失败可回退 <code>result</code> 表格事件</td><td><span class="hl">推荐</span></td></tr>
+    <tr><td>后端出图（matplotlib → PNG）</td><td>服务端渲染位图</td><td>与暗色主题/双主题冲突；二进制走 SSE 违背协议；图像不可二次加工</td><td>拒绝</td></tr>
+    <tr><td>前端全自主判断绘图</td><td>LLM 直接输出前端绘图指令</td><td>绕过能力路由与注册表，破坏 M4 架构故事——恰是要证明的东西</td><td>拒绝</td></tr>
+  </table></div>
+  <p class="small">图表库建议 ECharts（bundle 内联，符合交付偏好"无外部资源"不适用于本项目仓库本身，前端按现有依赖规范处理）。两种图型：柱状（分类对比）、折线（趋势）。</p>
+
+  <h4>选型 3：评估报告可视化（FR-10）</h4>
+  <div class="tbl-scroll"><table>
+    <tr><th>方案</th><th>成本</th><th>结论</th></tr>
+    <tr><td><b>静态页直接读取 evaluation/reports/*.json</b></td><td>零后端改动，一个前端路由/静态 HTML</td><td><span class="hl">推荐（本期）</span></td></tr>
+    <tr><td>新增 /api/evaluation 接口 + 动态页</td><td>后端 + 接口契约评审</td><td>本期不做，列入后续版本池</td></tr>
+  </table></div>
+
+  <h4>选型 4：演示数据集题材（遗留 P1，默认假设待确认）</h4>
+  <p>候选：连锁奶茶店（推荐：数据维度直观、易造"直觉反差"情节、面试沟通无门槛）/ 3C 数码店（金额大但维度抽象）。<b>默认按奶茶店推进，P1 拍板前不启动 FR-06 编码</b>。</p>
+
+  <h3>5.3 推荐方案汇总</h3>
+  <div class="quote"><b>推荐组合</b>：Caddy + sslip.io（W1 验证，失败切域名）+ 后端 chart spec / 前端渲染（零改图）+ 静态评估页 + 奶茶店数据集（待确认）。不选其余方案的原因已在各对比表标注，核心裁决依据是<span class="hl-b">与既有架构契约（00 文档）的契合度优先于实现便利</span>。</div>
+
+  <h3>5.4 演进路径</h3>
+  <div class="tbl-scroll"><table>
+    <tr><th style="width:110px">阶段</th><th>内容</th><th>触发条件</th></tr>
+    <tr><td>本期 v1.1</td><td>本 PRD 全部范围（4-5 周）</td><td>已启动</td></tr>
+    <tr><td>v1.2 候选池</td><td>数据下钻、扩展图型、/api/evaluation 动态化、英文 README 全量化</td><td>v1.1 收口评审通过</td></tr>
+    <tr><td>C 开源化</td><td>CONTRIBUTING / Issue 模板 / 示例生态</td><td>在线 demo 上线且获得 ≥3 次外部正向反馈（面试通过、社区 star、同行评价）</td></tr>
+    <tr><td>B 产品化</td><td>真实数据源接入、账号体系、多租户</td><td>出现明确的真实用户/数据源机会（外部输入驱动，不主动启动）</td></tr>
+  </table></div>
+
+  <!-- ================= 六 ================= -->
+  <h2 id="s6">六、用户角色与使用场景</h2>
+
+  <h3>6.1 用户角色</h3>
+  <div class="tbl-scroll"><table>
+    <tr><th style="width:70px">编号</th><th>角色</th><th>画像与目标</th><th>能力水平</th></tr>
+    <tr><td>R1</td><td>面试官 / 技术同行</td><td>首要受众。时间碎片化（≤15 分钟），目标是快速判断项目深度与候选人叙事真实性</td><td>熟练；可能当场追问架构细节</td></tr>
+    <tr><td>R2</td><td>项目所有者（本人）</td><td>演示者与维护者，目标是"任何场合 3 分钟讲清项目"</td><td>全知</td></tr>
+    <tr><td>R3</td><td>潜在协作者 / 社区读者</td><td>次要受众，通过博客或 README 到达，关注工程方法可复用性</td><td>熟练，愿意 clone 复现</td></tr>
+    <tr><td>R4</td><td>评估框架（内部角色）</td><td>runner 进程，按 datasets + feature flags 产出报告，不侵入主链路</td><td>—</td></tr>
+  </table></div>
+
+  <h3>6.2 场景设计三层次</h3>
+  <div class="tbl-scroll"><table>
+    <tr><th style="width:110px">层次</th><th>场景</th><th>关键触点与要求</th></tr>
+    <tr><td rowspan="3">主流程</td><td>S1 面试现场 3 分钟演示（R1+R2）</td><td>打开在线 demo → 演示题库 2-3 题（含 1 题图表）→ 收尾亮评估报告页；全程 ≤3 分钟、零阻断</td></tr>
+    <tr><td>S2 陌生人自助复现（R1/R3）</td><td>README 三行命令 → bootstrap 自检 → 10 分钟内成功问数；卡点必须给出明确指引（FR-01）</td></tr>
+    <tr><td>S3 深聊技术（R1）</td><td>评估报告可视化页 → KV cache 对照实验数字 → 能力注册表演示 chart 零改图接入</td></tr>
+    <tr><td rowspan="2">分支流程</td><td>S4 在线 demo 自由提问</td><td>演示题库之外的问题：正常分发 dataquery / default；行为与能力注册表一致（FR-07）</td></tr>
+    <tr><td>S5 博客导流（R3）</td><td>博客 → 仓库 → demo 链接，形成"读文章看代码玩 demo"闭环</td></tr>
+    <tr><td rowspan="2">异常流程</td><td>S6 演示现场故障</td><td>API 超时/断网 → 预录 GIF 兜底；demo 站点宕机 → 本地一键启动兜底（FR-01 是所有异常的最终兜底）</td></tr>
+    <tr><td>S7 公网被滥用</td><td>限流触发 → 友好提示；费用阈值告警 → 临时关闭 demo 入口并公告（FR-05 / 十二节）</td></tr>
+  </table></div>
+
+  <!-- ================= 七 ================= -->
+  <h2 id="s7">七、功能需求</h2>
+  <p>优先级采用 MoSCoW（M=必须 S=应该 C=可以）。所有 FR 均须遵守两条全局规则：<b>① Feature Flags 纪律</b>（涉及行为变更的配置一律走 <code>conf/</code>，关闭 = 旧行为）；<b>② 事件协议兼容</b>（新增允许，修改/删除已发布语义禁止）。</p>
+
+  <h3>7.1 需求总览</h3>
+  <div class="tbl-scroll"><table>
+    <tr><th>编号</th><th>名称</th><th>优先级</th><th>阶段</th><th>一句话描述</th></tr>
+    <tr><td>FR-01</td><td>一键启动脚本</td><td><span class="hl">M</span></td><td>P0</td><td>一条命令完成依赖拉起→建库→后端→前端，10 分钟可用</td></tr>
+    <tr><td>FR-02</td><td>README 定位降调（首改）</td><td><span class="hl">M</span></td><td>P0</td><td>首屏一句话定位对齐实际能力，修名实落差</td></tr>
+    <tr><td>FR-03</td><td>安全清理与防复发</td><td><span class="hl">M</span></td><td>P0</td><td>凭据轮换、历史扫描、pre-commit 密钥扫描</td></tr>
+    <tr><td>FR-04</td><td>.env 指引与启动自检</td><td><span class="hl">M</span></td><td>P0</td><td>密钥申请路径清晰，缺配置报人话不报堆栈</td></tr>
+    <tr><td>FR-05</td><td>HTTPS 部署固化</td><td><span class="hl">M</span></td><td>P1</td><td>sslip.io + Caddy 自动证书 + 进程守护 + 限流</td></tr>
+    <tr><td>FR-06</td><td>演示数据集与题库</td><td><span class="hl">M</span></td><td>P1</td><td>奶茶店数据集（P1 待确认）+ 8-10 道反直觉演示题</td></tr>
+    <tr><td>FR-07</td><td>兜底体验打磨</td><td><span class="hl">M</span></td><td>P1</td><td>default 回答质量 + SQL 失败人话提示，无堆栈泄露</td></tr>
+    <tr><td>FR-08</td><td>演示脚本双版本</td><td><span class="hl">S</span></td><td>P1</td><td>3 分钟电梯版 + 10 分钟深聊版 + 挂场预案</td></tr>
+    <tr><td>FR-09</td><td>chart 能力落地（零改图）</td><td><span class="hl">M</span></td><td>P2</td><td>第三能力走注册表接入，SSE 新增 chart 事件，前端渲染</td></tr>
+    <tr><td>FR-10</td><td>评估报告可视化页</td><td><span class="hl">S</span></td><td>P2</td><td>静态页渲染五维指标 + 对照视图</td></tr>
+    <tr><td>FR-11</td><td>KV cache 对照实验</td><td><span class="hl">S</span></td><td>P2</td><td>context on/off 定量对比，产出可复现报告</td></tr>
+    <tr><td>FR-12</td><td>版本标签与 CHANGELOG</td><td><span class="hl">S</span></td><td>P2</td><td>v1.1 tag + 里程碑叙事</td></tr>
+    <tr><td>FR-13</td><td>README 终版</td><td><span class="hl">M</span></td><td>P3</td><td>双语 + 架构图 + GIF + 评估表 + demo 链接</td></tr>
+    <tr><td>FR-14</td><td>技术博客 1 篇</td><td><span class="hl">S</span></td><td>P3</td><td>能力路由/记忆/评估三选一切面，2000-3000 字</td></tr>
+    <tr><td>FR-15</td><td>简历成果句 3 条</td><td><span class="hl">S</span></td><td>P3</td><td>量化表述，数字全部可溯源评估报告</td></tr>
+  </table></div>
+
+  <h3>7.2 Phase 0 · 定位收敛与地基</h3>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-01</span><span class="name">一键启动脚本</span><span class="tag g">M</span><span class="tag b">P0</span></div>
+    <p>提供 <code>make up</code>（或 <code>bash bootstrap.sh</code>）单命令启动：依赖服务（docker compose）→ 元数据知识库构建 → 后端 → 前端。分层输出日志，任一层失败立即给出原因与修复指引。</p>
+    <h4>业务规则</h4>
+    <ul>
+      <li>启动前必须执行环境自检：Docker / uv / pnpm 存在性、端口占用（3307/8000/5173）、<code>.env</code> 存在性与必填项</li>
+      <li>自检失败禁止继续执行，输出缺失项与官方申请/安装指引（衔接 FR-04）</li>
+      <li>脚本必须幂等：重复执行不产生脏数据（建库前检测初始化标记）</li>
+    </ul>
+    <div class="gwt">
+      <div><b>Given</b> 一台全新 Ubuntu 机器已安装 Docker / uv / pnpm，</div>
+      <div><b>When</b> 克隆仓库、按 README 填入 .env 后执行 <code>make up</code>，</div>
+      <div><b>Then</b> ≤10 分钟内浏览器访问前端并完成一次成功问数（全流程零人工排障）。</div>
+    </div>
+    <div class="accept"><b>验收：</b>陌生人测试 n≥3 达成 K1（≥80%）；脚本在已初始化环境重复执行无副作用。</div>
+  </div>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-02</span><span class="name">README 定位降调（首改）</span><span class="tag g">M</span><span class="tag b">P0</span></div>
+    <p>首屏改为："基于 FastAPI + LangGraph 的电商问数 Agent 工程范本——五级能力路由 / KV cache 友好上下文 / 长期记忆 / 量化评估与 Feature Flags 对照实验的完整落地。"同时把快速启动压缩到三行命令前置。</p>
+    <div class="gwt">
+      <div><b>Given</b> 陌生人未接触过项目，</div>
+      <div><b>When</b> 只读 README 5 分钟，</div>
+      <div><b>Then</b> 能复述"做什么 / 怎么跑 / 三个技术亮点"（抽样 n≥3 达成 K3）。</div>
+    </div>
+    <div class="accept"><b>验收：</b>宣称能力与实际能力一一对应，无"通用智能助手平台"类过宽表述；快速启动位于首屏。</div>
+  </div>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-03</span><span class="name">安全清理与防复发</span><span class="tag g">M</span><span class="tag b">P0</span></div>
+    <p>处置 10-07 误提交 SSH 脚本的遗留风险。</p>
+    <h4>业务规则</h4>
+    <ul>
+      <li>必须轮换当时脚本内涉及的全部凭据（服务器密码/密钥），轮换后旧凭据访问必须被拒绝</li>
+      <li>必须对全量 git 历史执行密钥扫描（gitleaks 或等价工具），输出扫描报告；发现新的泄露项按同一流程轮换</li>
+      <li>应该配置 pre-commit 密钥扫描防止复发；应该收紧服务器 SSH（密钥登录、禁用密码登录）</li>
+      <li>可以视扫描结果决定是否用 BFG 清洗历史（若轮换已彻底完成，可以不清洗，仅记录）</li>
+    </ul>
+    <div class="gwt">
+      <div><b>Given</b> 历史提交中存在过含凭据的 SSH 脚本，</div>
+      <div><b>When</b> 完成轮换并用旧凭据尝试登录、运行全量历史扫描，</div>
+      <div><b>Then</b> 旧凭据全部失效，扫描报告无未处置的高危泄露项，清理清单归档至 docs/。</div>
+    </div>
+  </div>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-04</span><span class="name">.env 指引与启动自检</span><span class="tag g">M</span><span class="tag b">P0</span></div>
+    <p>提供 <code>.env.example</code>（三个模型密钥项 + 注释申请链接），bootstrap 自检缺失项时输出"缺什么、去哪申请、填哪里"三段式指引。</p>
+    <div class="gwt">
+      <div><b>Given</b> 新用户没有任何 API Key，</div>
+      <div><b>When</b> 按 README 指引申请并填入至少一家（DeepSeek / Qwen / GLM 任一），</div>
+      <div><b>Then</b> 该模型可完成一次成功问数；缺配置时启动日志为指引文案而非 Python 堆栈。</div>
+    </div>
+  </div>
+
+  <h3>7.3 Phase 1 · 可演示性打磨</h3>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-05</span><span class="name">HTTPS 部署固化</span><span class="tag g">M</span><span class="tag b">P1</span></div>
+    <p>服务器部署 Caddy（反代 8000 后端 + 静态前端），域名走 <code>&lt;IP&gt;.sslip.io</code> 自动签发证书；后端与依赖服务以 systemd / docker restart 策略守护。</p>
+    <h4>业务规则</h4>
+    <ul>
+      <li>必须 HTTPS（浏览器无告警），HTTP 请求 301 跳转</li>
+      <li>必须配置 IP 级限流：单 IP 每分钟提问 ≤10 次（估算初值，可按费用阈值校准），超限返回 429 与友好文案</li>
+      <li>应该配置费用阈值告警：当日 token 费用超阈值（默认 ¥5/天，估算初值）时写告警日志；达到硬上限（默认 ¥15/天）自动暂停对外服务并展示公告</li>
+      <li>禁止在公网响应中输出堆栈与内部路径</li>
+    </ul>
+    <div class="gwt">
+      <div><b>Given</b> 服务器完成部署，</div>
+      <div><b>When</b> 浏览器访问 <code>https://&lt;IP&gt;.sslip.io</code> 并连续提问、kill 后端进程、以 11 次/分钟提问，</div>
+      <div><b>Then</b> 证书有效无告警；secure context 下会话初始化正常（crypto.randomUUID 原生可用）；进程 30 秒内自动恢复；第 11 次提问收到 429 友好提示。</div>
+    </div>
+  </div>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-06</span><span class="name">演示数据集与题库</span><span class="tag g">M</span><span class="tag b">P1</span><span class="tag r">依赖 P1 拍板（题材）</span></div>
+    <p>用"连锁奶茶店"数据集替换现有示例库：5 张表（门店 dim_store / 产品 dim_product / 时段 dim_date / 订单 fact_orders / 会员 dim_member，表结构以建库脚本为准），订单量约 5 万行（<span class="meta">估算，保证聚合查询有难度且查询体验流畅</span>），数据含预设"直觉反差"情节（见附录 C 题库）。</p>
+    <h4>业务规则</h4>
+    <ul>
+      <li>数据必须由脚本生成并版本化（可重复重建，衔接异常处理 E-12）</li>
+      <li>题库 8-10 题，每题附标准答案与人工核对记录</li>
+      <li>必须同步处理存量：重建元数据知识库（build_meta_knowledge）+ 更新 evaluation 数据集用例 + 重跑基线并在报告中标注数据集版本号（存量迁移方案，衔接 RK-02）</li>
+    </ul>
+    <div class="gwt">
+      <div><b>Given</b> 新数据集已导入且知识库重建完成，</div>
+      <div><b>When</b> 逐题执行题库、并重跑 eval_v1 全量基线，</div>
+      <div><b>Then</b> 题库 SQL 可执行率 100% 且结果与人工答案一致（K4）；评估基线在新数据集版本下重新归档，前后版本报告并存可对比。</div>
+    </div>
+  </div>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-07</span><span class="name">兜底体验打磨</span><span class="tag g">M</span><span class="tag b">P1</span></div>
+    <p>把"面试官最爱点错的场景"变成加分项：default_answer 回答体面；SQL 生成/执行失败时给出人话原因 + 建议改写方向。</p>
+    <h4>业务规则</h4>
+    <ul>
+      <li>失败提示必须包含三类信息：发生了什么（人话）/ 可能原因 / 建议怎么改问法；禁止输出堆栈、SQL 原文（可输出脱敏后的 SQL 摘要）</li>
+      <li>无关闲聊、超纲问题（表外字段/跨库）必须被路由到 default 并礼貌引导回问数场景</li>
+    </ul>
+    <div class="gwt">
+      <div><b>Given</b> 10 类边界输入（无关闲聊 / 超长文本 / 含 SQL 注入片段 / 敏感词 / 表外字段提问 / 空输入 / 纯符号 / 中英混杂 / 疑似个人隐私问题 / 极短词），</div>
+      <div><b>When</b> 逐类输入在线 demo 与本地环境，</div>
+      <div><b>Then</b> 全部获得可读回应（含"建议改写"类提示），零崩溃、零堆栈泄露，路由归属与能力注册表预期一致；测试记录归档 docs/。</div>
+    </div>
+  </div>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-08</span><span class="name">演示脚本双版本</span><span class="tag y">S</span><span class="tag b">P1</span></div>
+    <p>3 分钟电梯版（demo 3 题 + 一句话技术亮点）与 10 分钟深聊版（+ 评估报告页 + KV cache 实验 + 架构问答），各含操作步骤、预期结果、挂场预案（预录 GIF / 本地启动）。</p>
+    <div class="gwt">
+      <div><b>Given</b> 脚本定稿，</div>
+      <div><b>When</b> 作者按脚本连续彩排 2 遍（含模拟一次 API 超时切换 GIF 预案），</div>
+      <div><b>Then</b> 两版本均在时限内完成且无阻断点。</div>
+    </div>
+  </div>
+
+  <h3>7.4 Phase 2 · 技术亮点做深</h3>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-09</span><span class="name">chart 能力落地（零改图）</span><span class="tag g">M</span><span class="tag p">P2 · 本期技术核心</span><span class="tag b">D 线实验 #1</span></div>
+    <p>注册表新增 chart 能力：规则/embedding 层配置"趋势、柱状图、可视化、画图"类触发词 → 路由分发 → dataquery 完成取数后进入 chart_spec 生成节点 → SSE 推送 <code>chart</code> 事件 → 前端按主题渲染（ECharts，柱状/折线两种图型）。</p>
+    <h4>业务规则</h4>
+    <ul>
+      <li>必须走零改图路径：问数子图 19 节点内部 <b>0 行改动</b>（K5，git diff 审查），新增逻辑全部位于路由分发层与新增节点/模块</li>
+      <li>事件协议：新增事件类型 <code>chart</code>，字段 <code>{chart_type: "bar"|"line", x, y, summary}</code>；<code>summary</code> 必填（图表的文本摘要，兼顾可访问性与协议兜底）</li>
+      <li>失败必须回退：spec 生成失败时改发 <code>result</code>（表格）+ <code>explanation</code>（一句话说明），禁止失败阻断会话</li>
+      <li>图表数据必须来自本次取数结果，禁止二次查询（成本红线）</li>
+      <li>Feature Flags：新增 <code>features.capability_chart</code>（默认 false → 灰度开启），关闭即回退纯表格行为</li>
+    </ul>
+    <div class="gwt">
+      <div><b>Given</b> chart 能力已注册且开关开启，</div>
+      <div><b>When</b> 提问"最近 7 天各门店 GMV 趋势"与"对比各产品线销量"，</div>
+      <div><b>Then</b> 事件流依次含 progress / result（或直接 chart）/ chart，前端渲染出与数据一致的折线图与柱状图且带文本摘要；人为构造 spec 生成失败时，会话回退为表格 + 说明不中断。</div>
+      <div style="margin-top:6px"><b>When</b> <code>capability_chart=false</code>，</div>
+      <div><b>Then</b> 行为与 v1.0 完全一致（回归断言）。</div>
+    </div>
+    <div class="accept"><b>验收：</b>K5（0 行 diff）+ chart 渲染成功率 ≥90%（口径：chart 事件被前端成功渲染的次数 ÷ chart 意图请求数，<span class="meta">估算初值</span>）+ 新增评估指标（chart 触发正确性）接入 eval 报告。</div>
+  </div>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-10</span><span class="name">评估报告可视化页</span><span class="tag y">S</span><span class="tag b">P2</span></div>
+    <p>静态页面读取 <code>evaluation/reports/*.json</code>，渲染五组指标卡（检索三通道 / 意图 / SQL / 成本 / 记忆回忆）+ 多报告并排对比表（复用 <code>--compare</code> 的数据结构），展示费用环节分布。</p>
+    <div class="gwt">
+      <div><b>Given</b> reports 目录存在 baseline 与至少一份对照报告，</div>
+      <div><b>When</b> 打开评估页并抽查 5 项指标数值与 JSON 原文比对，</div>
+      <div><b>Then</b> 全部一致；页面支持报告文件切换与并排对比，首屏加载 ≤2s。</div>
+    </div>
+  </div>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-11</span><span class="name">KV cache 对照实验</span><span class="tag y">S</span><span class="tag b">P2</span></div>
+    <p>用评估框架跑 <code>context_management=true/false</code> × 至少 2 个模型（DeepSeek + GLM）的四组实验，量化 KV cache 友好提示词在 token（cache_hit 占比）、费用、延迟上的收益。</p>
+    <div class="gwt">
+      <div><b>Given</b> 四组实验各 ≥20 用例执行完成，</div>
+      <div><b>When</b> 查看对照报告，</div>
+      <div><b>Then</b> 每组的 token/费用/延迟差值有数据支撑且可一键重跑复现（脚本 + 命令行入档 docs/），结论以实测为准（不预设收益数值）。</div>
+    </div>
+  </div>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-12</span><span class="name">版本标签与 CHANGELOG</span><span class="tag y">S</span><span class="tag b">P2</span></div>
+    <p>打 <code>v1.1</code> tag，CHANGELOG 按"v0 问数雏形 → v1 七模块平台化 → v1.1 作品集化"三段里程碑叙事整理 52+ 提交。</p>
+    <div class="gwt"><div><b>Given</b> CHANGELOG 合入，</div><div><b>When</b> 读者查看，</div><div><b>Then</b> 每个里程碑对应可点击的 tag/commit 区间，叙事与仓库事实一致。</div></div>
+  </div>
+
+  <h3>7.5 Phase 3 · 成果包装放大</h3>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-13</span><span class="name">README 终版</span><span class="tag g">M</span><span class="tag b">P3</span></div>
+    <p>在 FR-02 首改基础上完成终版：中文为主体 + 英文概览节、架构图（可引用 00 文档分层）、30 秒 GIF 演示、评估指标表（真实数据）、三行快速启动、在线 demo 链接与使用公约（限流说明）。</p>
+    <div class="gwt"><div><b>Given</b> 终版合入，</div><div><b>When</b> 陌生人只读 README 5 分钟（重测 n≥3），</div><div><b>Then</b> K3 通过且 5 分钟内能找到 demo 链接与本地启动入口。</div></div>
+  </div>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-14</span><span class="name">技术博客 1 篇</span><span class="tag y">S</span><span class="tag b">P3</span></div>
+    <p>选题（能力路由 / 记忆 / 评估三选一，建议"五级能力路由的设计与零改图验证"），2000-3000 字，必须有实测数据与图，文末链仓库与 demo。</p>
+    <div class="gwt"><div><b>Given</b> 博客定稿发布，</div><div><b>When</b> 读者按文中步骤在仓库复现对应实验，</div><div><b>Then</b> 步骤可走通，数据与仓库评估报告一致。</div></div>
+  </div>
+
+  <div class="fr">
+    <div class="fr-head"><span class="id">FR-15</span><span class="name">简历成果句 3 条</span><span class="tag y">S</span><span class="tag b">P3</span></div>
+    <p>三条量化成果句，覆盖：架构设计（五级路由 + 零改图扩展）、质量工程（评估框架 + Feature Flags 对照）、工程效率（成本/延迟优化数据）。</p>
+    <h4>业务规则</h4>
+    <ul><li>每条数字必须可溯源到评估报告或代码事实；<b>禁止</b>编造或夸大（无数据的维度用定性+机制描述）</li></ul>
+    <div class="gwt"><div><b>Given</b> 成果句定稿，</div><div><b>When</b> 逐条溯源核对，</div><div><b>Then</b> 每个数字能指向具体报告文件或指标口径。</div></div>
+  </div>
+
+  <!-- ================= 八 ================= -->
+  <h2 id="s8">八、非功能需求</h2>
+  <div class="tbl-scroll"><table>
+    <tr><th style="width:90px">类别</th><th>要求</th></tr>
+    <tr><td>性能</td><td>演示问题端到端 P50 ≤15s、P95 ≤25s（口径：提问发出至 SSE result 帧完整接收，<span class="meta">估算基线，以实测校准</span>）；SSE 首帧（首个 progress 事件）≤2s；评估页首屏 ≤2s</td></tr>
+    <tr><td>安全</td><td>公网必须 HTTPS；密钥仅存 .env（服务器上权限 600）；响应禁止堆栈/内部路径泄露；SSH 密钥登录；demo 数据库使用<b>只读账号</b>（防 Text2SQL 写操作风险，见十一节）</td></tr>
+    <tr><td>防滥用</td><td>IP 限流（≤10 次/分钟/IP）+ 费用阈值告警（¥5/天 软上限告警、¥15/天 硬上限自动暂停，<span class="meta">估算初值可调</span>）</td></tr>
+    <tr><td>兼容</td><td>Chrome / Edge / Safari 最近两个大版本；HTTP 环境保留 UUID 兜底逻辑（不删除既有修复）</td></tr>
+    <tr><td>可访问性</td><td>chart 事件必须含 summary 文本摘要（读屏可获取结论）；沿用双主题对比度基线</td></tr>
+    <tr><td>可维护</td><td>新行为一律 Feature Flags 化（关闭=旧行为）；数据生成/部署脚本版本化幂等；docs/ 沿用既有 final 文档纪律</td></tr>
+  </table></div>
+
+  <!-- ================= 九 ================= -->
+  <h2 id="s9">九、业务流程与状态流转</h2>
+
+  <h3>9.1 主业务流程（受众视角）</h3>
+  <div class="card"><p class="small">触达（demo 链接 / 简历 / 博客）→ README 5 分钟理解 → 【分支】在线 demo 直接体验 或 本地 clone 复现 → 成功问数（北极星事件）→ 深入（评估页 / 博客 / 代码）→ 形成评价（面试结论 / star / 反馈）。北极星事件 = K1 统计入口。</p></div>
+
+  <h3>9.2 chart 请求状态流转</h3>
+  <div class="tbl-scroll"><table>
+    <tr><th>状态</th><th>触发</th><th>迁移</th><th>对外表现（SSE）</th></tr>
+    <tr><td>意图识别</td><td>请求进入路由层</td><td>命中 chart 规则/embedding → 进入 dataquery 取数；未命中 → dataquery / default 常规链路</td><td>progress：理解用户意图</td></tr>
+    <tr><td>取数中</td><td>dataquery 子图执行</td><td>SQL 校验执行成功 → chart spec 生成；失败 → fail 常规分支</td><td>progress：检索/生成 SQL/执行</td></tr>
+    <tr><td>spec 生成</td><td>取数成功</td><td>成功 → 推送 chart；失败/超时 → <b>回退</b>为 result + explanation（状态单向，禁止回跳重试超过 1 次）</td><td>chart 或 result+explanation</td></tr>
+    <tr><td>渲染</td><td>前端收到 chart</td><td>渲染成功/失败均不再回传后端；前端渲染失败必须降级显示 summary 文本</td><td>—</td></tr>
+  </table></div>
+
+  <h3>9.3 评估与发布流程</h3>
+  <ul>
+    <li><b>开发-验证循环</b>：改动 → 跑 quick 回归（10 用例约 3 分钟）→ 涉及主链路时跑全量基线 → <code>--compare</code> 出对照 → 报告入档</li>
+    <li><b>部署流程</b>：本地全量验收 → 服务器部署 → 冒烟 10 问（题库前 10 题）→ 上线观察；失败即回退上一 tag 镜像</li>
+  </ul>
+
+  <!-- ================= 十 ================= -->
+  <h2 id="s10">十、数据与埋点需求</h2>
+
+  <h3>10.1 演示数据集（FR-06 附属）</h3>
+  <div class="tbl-scroll"><table>
+    <tr><th>表</th><th>内容</th><th>要点</th></tr>
+    <tr><td>dim_store</td><td>门店（城市/开业时间/类型）</td><td>含新老店对比维度</td></tr>
+    <tr><td>dim_product</td><td>产品（品类/价格/上市时间）</td><td>含联名款与经典款情节</td></tr>
+    <tr><td>dim_date</td><td>日期/时段维度</td><td>支撑时段聚合</td></tr>
+    <tr><td>fact_orders</td><td>订单明细（约 5 万行，估算）</td><td>含会员标识、渠道（堂食/外卖）、金额</td></tr>
+    <tr><td>dim_member</td><td>会员（注册时间/等级）</td><td>支撑会员 vs 非会员对比</td></tr>
+  </table></div>
+  <p class="small">数据全部由脚本虚构生成并在 README 标注"演示数据为程序生成、非真实经营数据"（合规要求）；"直觉反差"情节清单见附录 C，由数据生成参数控制。</p>
+
+  <h3>10.2 使用埋点（demo 侧，极轻量）</h3>
+  <ul>
+    <li>必须记录：请求时间戳、路由命中能力、成功/失败、耗时、token 用量（usage tracker 已有，落本地日志）</li>
+    <li>应该记录：独立 IP 计数（哈希后存储）</li>
+    <li><b>禁止</b>上报第三方；提问原文仅本地留存 ≤7 天后滚动清理（隐私最小化口径）</li>
+    <li>用途：K2 可用率探测、简历素材"demo 累计服务 N 次提问"（N 有日志支撑）</li>
+  </ul>
+
+  <h3>10.3 评估数据口径（沿用 + 新增）</h3>
+  <ul>
+    <li>沿用五维：检索三通道 hit@k/MRR/P/R、意图准确率、SQL 可执行率/结果正确性、成本（token/费用/峰谷）、记忆四指标</li>
+    <li>新增：chart 触发正确性（应画未画=漏调，不应画而画=误调）、chart 渲染成功率（目标 ≥90%，估算初值）</li>
+    <li>数据集版本号进入报告元数据（衔接 FR-06 存量迁移）</li>
+  </ul>
+
+  <!-- ================= 十一 ================= -->
+  <h2 id="s11">十一、权限与安全要求</h2>
+  <div class="tbl-scroll"><table>
+    <tr><th style="width:130px">项</th><th>要求</th></tr>
+    <tr><td>权限模型</td><td>本期无账号体系（4.2 明确不做）：公网 demo 为<b>匿名公开只读</b>单租户；本地环境为所有者全权</td></tr>
+    <tr><td>数据库账号</td><td><b>必须</b>为 demo 后端配置 MySQL 只读账号（仅 SELECT），从数据库层杜绝 Text2SQL 写操作/删表风险——这是公网 Text2SQL 的第一道硬防线，优先级高于应用层校验</td></tr>
+    <tr><td>密钥管理</td><td>.env 唯一来源；服务器 env 文件权限 600；密钥不进代码、不进日志、不进文档</td></tr>
+    <tr><td>主机安全</td><td>SSH 密钥登录、禁用密码登录（FR-03）；防火墙仅放行 80/443/SSH</td></tr>
+    <tr><td>防复发</td><td>pre-commit 密钥扫描（gitleaks）；新凭据产生时同步检查 .gitignore 覆盖</td></tr>
+    <tr><td>数据合规</td><td>演示数据为虚构生成（README 声明）；不采集个人身份信息；提问原文本地留存 ≤7 天；本期无未成年人/跨境场景，数据合规专项 8 项不适用</td></tr>
+    <tr><td>资金专项</td><td>本期无支付/退款/计费场景，交易资损 8 项与资金三件套<b>不适用</b>；唯一资金相关项为 demo 密钥费用控制，已由限流 + 阈值告警覆盖（FR-05）</td></tr>
+  </table></div>
+
+  <!-- ================= 十二 ================= -->
+  <h2 id="s12">十二、异常处理清单</h2>
+  <div class="tbl-scroll"><table>
+    <tr><th style="width:70px">编号</th><th>场景</th><th>处理策略</th></tr>
+    <tr><td>E-01</td><td>演示现场 LLM API 超时/限流</td><td>演示脚本切预录 GIF（FR-08 预案）；不现场重试超过 1 次</td></tr>
+    <tr><td>E-02</td><td>演示现场断网</td><td>本地一键启动兜底（FR-01 是所有演示异常的最终兜底）</td></tr>
+    <tr><td>E-03</td><td>公网被刷 / 异常流量</td><td>IP 限流返回 429 友好文案；告警日志；持续刷量可临时关闭入口并公告</td></tr>
+    <tr><td>E-04</td><td>密钥日费用达硬上限</td><td>自动暂停对外服务 + 静态公告页；人工确认后恢复（FR-05 规则）</td></tr>
+    <tr><td>E-05</td><td>后端进程崩溃</td><td>systemd/docker 自动重启 ≤30s 恢复；连续崩溃 3 次触发告警日志</td></tr>
+    <tr><td>E-06</td><td>服务器磁盘满</td><td>logrotate 日志轮转；docker 日志限额；部署时预留磁盘告警阈值（80%）</td></tr>
+    <tr><td>E-07</td><td>SSE 断流</td><td>前端按既有协议降级为 error 事件提示重试，不得白屏（协议兜底已具备，回归确认）</td></tr>
+    <tr><td>E-08</td><td>SQL 执行失败 / 生成失败</td><td>FR-07 人话提示 + 改写建议；绝不泄露堆栈</td></tr>
+    <tr><td>E-09</td><td>chart spec 生成失败</td><td>回退表格 + 一句话说明（FR-09 规则，最多重试 1 次）</td></tr>
+    <tr><td>E-10</td><td>sslip.io 证书签发失败</td><td>触发 P2 决策：购买正式域名切换（选型 1 备选路径，W1 内完成）</td></tr>
+    <tr><td>E-11</td><td>凭据泄露复发</td><td>应急三步：立即轮换 → 评估影响面 → 复盘入 docs/bugs（沿既有 Bug 档案纪律）</td></tr>
+    <tr><td>E-12</td><td>演示库数据损坏/误写</td><td>数据生成脚本版本化，一条命令重建（FR-06 规则）；只读账号从源头降低概率</td></tr>
+  </table></div>
+
+  <!-- ================= 十三 ================= -->
+  <h2 id="s13">十三、上线计划、依赖与上线后验证</h2>
+
+  <h3>13.1 排期与里程碑（投入 15h+/周）</h3>
+  <div class="tbl-scroll"><table>
+    <tr><th style="width:150px">周次</th><th>内容</th><th>里程碑（出口标准）</th></tr>
+    <tr><td>W1 · 10-08 ~ 10-12</td><td>FR-01/02/03/04（Phase 0 全量）+ FR-05 部署与 sslip.io 验证（首日验证，失败即启动 E-10）</td><td><span class="hl-b">M1 在线 demo 上线</span>：HTTPS 可访问 + 限流生效 + 冒烟 10 问通过</td></tr>
+    <tr><td>W2 · 10-13 ~ 10-19</td><td>FR-06（P1 拍板为前置）+ FR-07 + FR-08 + FR-13 初稿启动</td><td><span class="hl-b">M2 演示包就绪</span>：题库 K4 达成 + 兜底测试归档 + 脚本彩排通过</td></tr>
+    <tr><td>W3 · 10-20 ~ 10-26</td><td>FR-09 设计评审 → 编码（注册表/路由/spec 节点/SSE/前端）+ 评估接入</td><td>chart 能力测试环境全通（含回退分支与 Flags 关闭回归）</td></tr>
+    <tr><td>W4 · 10-27 ~ 11-02</td><td>FR-09 上线（灰度开启）+ FR-10 + FR-11 + K5 diff 审查</td><td><span class="hl-b">M3 亮点收官</span>：零改图证明归档 + 对照实验报告 + 评估页可访问</td></tr>
+    <tr><td>W5 · 11-03 ~ 11-09</td><td>FR-12/13 终版 + FR-14 + FR-15 + 陌生人测试复测（K1/K3）</td><td><span class="hl-b">M4 全量收口</span>：K1-K6 逐项核销，v1.1 收口评审</td></tr>
+  </table></div>
+  <p class="small">灰度说明：单人项目从简——chart 能力以 <code>capability_chart</code> 开关实现"代码上线、行为灰度"；回滚 = 关开关（行为）或回退上一 tag（部署）。无阻塞级外部依赖排期冲突（见 13.2）。</p>
+
+  <h3>13.2 依赖评估（三档分级）</h3>
+  <div class="tbl-scroll"><table>
+    <tr><th>依赖项</th><th>类型</th><th>分级</th><th>最晚就绪时限</th><th>影响与替代方案</th></tr>
+    <tr><td>三家模型密钥有效且账户有余额/配额</td><td>外部服务</td><td><span class="hl-r">阻塞</span></td><td>W1 内确认</td><td>任一家可用即可开发与演示；三家全失效则本期暂停（当前均在用，风险低）</td></tr>
+    <tr><td>服务器可公网访问 + 80/443 可开放</td><td>自有资源</td><td><span class="hl-r">阻塞</span></td><td>W1 第一天</td><td>不可用则 M1 顺延并调整排期（当前已具备）</td></tr>
+    <tr><td>sslip.io 证书签发</td><td>外部免费服务</td><td><span class="hl-y">并行</span></td><td>W1 第一天验证</td><td>失败 → 购买正式域名（约 ¥30-80/年，15 分钟切换，E-10）</td></tr>
+    <tr><td>ECharts 引入与主题适配</td><td>技术依赖</td><td><span class="hl-y">并行</span></td><td>W2 结束前 PoC</td><td>不适配则降级为自绘 SVG 图表（成本可控）</td></tr>
+    <tr><td>正式域名</td><td>可选升级</td><td><span class="hl">可绕过</span></td><td>—</td><td>绕过方案即 sslip.io（默认路径）</td></tr>
+    <tr><td>预录 GIF（演示预案）</td><td>自制素材</td><td><span class="hl">可绕过</span></td><td>M2 前</td><td>绕过方案：关键步骤截图组</td></tr>
+  </table></div>
+
+  <h3>13.3 上线后验证</h3>
+  <ul>
+    <li><b>冒烟</b>：每次部署后执行题库前 10 题 + 1 次兜底路径输入，全过才算部署成功</li>
+    <li><b>一周观察</b>：M1 上线后连续 7 天可用性探测（K2 起算口径）与费用对账（对照 FR-05 阈值）</li>
+    <li><b>陌生人测试</b>：M2 后首测、M4 后复测，K1/K3 记录归档</li>
+    <li><b>收口评审</b>：M4 对照成功指标逐项核销，未达标项归因并进 v1.2 候选池</li>
+  </ul>
+
+  <!-- ================= 十四 ================= -->
+  <h2 id="s14">十四、风险与遗留问题</h2>
+
+  <h3>14.1 风险登记册（概率 × 影响，各 1-5 分）</h3>
+  <div class="tbl-scroll"><table>
+    <tr><th>编号</th><th>风险描述</th><th>类别</th><th>P</th><th>I</th><th>值</th><th>等级</th><th>应对措施</th></tr>
+    <tr><td>RK-01</td><td>公网 demo 被滥用，密钥费用失控</td><td>安全/成本</td><td>3</td><td>4</td><td>12</td><td><span class="hl-y">中</span></td><td>只读账号 + IP 限流 + 双阈值费用熔断（FR-05/E-03/E-04）</td></tr>
+    <tr><td>RK-02</td><td>换演示数据集导致既有 50 用例基线失效、评估断档</td><td>数据</td><td>4</td><td>3</td><td>12</td><td><span class="hl-y">中</span></td><td>FR-06 存量迁移方案：数据集版本化 + 用例同步更新 + 双版本报告并存</td></tr>
+    <tr><td>RK-03</td><td>chart 开发诱惑下顺手改 19 节点，破坏零改图故事</td><td>技术/范围</td><td>2</td><td>5</td><td>10</td><td><span class="hl-y">中</span></td><td>W3 设计评审先行；K5 git diff 审查作为硬验收；改动冲动一律记 v1.2 池</td></tr>
+    <tr><td>RK-04</td><td>投入不可持续，周期拖长重演"做完又迷茫"</td><td>进度</td><td>3</td><td>3</td><td>9</td><td><span class="hl-y">中</span></td><td>MoSCoW 排序保证 Must 项独立成周；每周末对照里程碑校准，落后即砍 Should 项</td></tr>
+    <tr><td>RK-05</td><td>面试深挖时对 AI 辅助开发的部分讲不清 why</td><td>叙事</td><td>3</td><td>3</td><td>9</td><td><span class="hl-y">中</span></td><td>每个模块补一段"决策为什么"（博客素材复用）；P3 尽快拍板 .codebuddy 目录去留</td></tr>
+    <tr><td>RK-06</td><td>sslip.io 不可用或证书签发受阻</td><td>技术</td><td>2</td><td>2</td><td>4</td><td><span class="hl">低</span></td><td>W1 首日验证 + 域名购买绕过（E-10）</td></tr>
+  </table></div>
+
+  <h3>14.2 遗留问题（后续版本池）</h3>
+  <ul>
+    <li>P1/P2/P3 三个待拍板项（见一节）——P1 卡 FR-06 启动，P2 卡 E-10 触发，P3 建议 W3 前定</li>
+    <li>数据下钻、扩展图型、/api/evaluation 动态化 → v1.2 候选池</li>
+    <li>开源化（C）/ 产品化（B）→ 触发条件见 5.4 演进路径</li>
+    <li>README 英文全量化 → v1.2 候选池（本期仅概览节）</li>
+  </ul>
+
+  <!-- ================= 十五 ================= -->
+  <h2 id="s15">十五、附录</h2>
+
+  <h3>附录 A · 需求追踪矩阵（RTM）</h3>
+  <div class="tbl-scroll"><table>
+    <tr><th>需求</th><th>名称</th><th>PRD 章节</th><th>里程碑</th><th>验收方式</th><th>状态</th></tr>
+    <tr><td>FR-01</td><td>一键启动</td><td>7.2</td><td>M1</td><td>陌生人测试 K1</td><td>待开发</td></tr>
+    <tr><td>FR-02</td><td>README 降调首改</td><td>7.2</td><td>M1</td><td>K3 抽样</td><td>待开发</td></tr>
+    <tr><td>FR-03</td><td>安全清理</td><td>7.2 / 11</td><td>M1</td><td>轮换验证 + 扫描报告</td><td>待开发</td></tr>
+    <tr><td>FR-04</td><td>.env 指引</td><td>7.2</td><td>M1</td><td>GWT 单验</td><td>待开发</td></tr>
+    <tr><td>FR-05</td><td>HTTPS 部署</td><td>7.3 / 8 / 11</td><td>M1</td><td>证书/守护/限流 GWT</td><td>待开发</td></tr>
+    <tr><td>FR-06</td><td>数据集与题库</td><td>7.3 / 10.1</td><td>M2</td><td>K4 + 基线重跑</td><td>待开发（前置 P1）</td></tr>
+    <tr><td>FR-07</td><td>兜底体验</td><td>7.3</td><td>M2</td><td>10 类边界输入记录</td><td>待开发</td></tr>
+    <tr><td>FR-08</td><td>演示脚本</td><td>7.3</td><td>M2</td><td>彩排 2 遍</td><td>待开发</td></tr>
+    <tr><td>FR-09</td><td>chart 能力</td><td>7.4 / 9.2</td><td>M3</td><td>K5 + 渲染成功率</td><td>待开发</td></tr>
+    <tr><td>FR-10</td><td>评估可视化页</td><td>7.4</td><td>M3</td><td>5 项数值抽查</td><td>待开发</td></tr>
+    <tr><td>FR-11</td><td>KV cache 实验</td><td>7.4</td><td>M3</td><td>四组报告 + 复现脚本</td><td>待开发</td></tr>
+    <tr><td>FR-12</td><td>Tag / CHANGELOG</td><td>7.4</td><td>M3/M4</td><td>区间可点击核验</td><td>待开发</td></tr>
+    <tr><td>FR-13</td><td>README 终版</td><td>7.5</td><td>M4</td><td>K3 复测</td><td>待开发</td></tr>
+    <tr><td>FR-14</td><td>技术博客</td><td>7.5</td><td>M4</td><td>复现走查</td><td>待开发</td></tr>
+    <tr><td>FR-15</td><td>简历成果句</td><td>7.5</td><td>M4</td><td>逐条溯源</td><td>待开发</td></tr>
+  </table></div>
+
+  <h3>附录 B · 用户故事（GWT）</h3>
+  <div class="card">
+    <p><b>US-01（R1 面试官）</b>：作为面试官，我想要在候选人打开链接后 3 分钟内看到一次完整的问数演示，以便在有限时间内判断项目真实深度。</p>
+    <div class="gwt"><div><b>Given</b> demo 在线可用，</div><div><b>When</b> 候选人按演示脚本执行 3 分钟版，</div><div><b>Then</b> 完成 ≥2 题问数（含 1 题 chart）且无阻断。</div></div>
+    <p><b>US-02（R1 面试官）</b>：作为面试官，我想要随手输入一个项目没预料到的问题，以便检验兜底质量。</p>
+    <div class="gwt"><div><b>Given</b> 我输入超纲/无关问题，</div><div><b>When</b> 系统响应，</div><div><b>Then</b> 得到体面引导或人话错误提示，无堆栈无崩溃。</div></div>
+    <p><b>US-03（R3 协作者）</b>：作为社区读者，我想要在自己机器上 10 分钟跑通项目，以便验证文章所述是否属实。</p>
+    <div class="gwt"><div><b>Given</b> 我有基础开发环境，</div><div><b>When</b> 按 README 三行命令操作，</div><div><b>Then</b> 10 分钟内完成首次成功问数。</div></div>
+    <p><b>US-04（R3 协作者）</b>：作为社区读者，我想要看到量化的评估报告页，以便判断"优化"是否有数据支撑。</p>
+    <div class="gwt"><div><b>Given</b> 我打开评估页，</div><div><b>When</b> 查看对照报告，</div><div><b>Then</b> 能看到 baseline 与实验组并排的指标差值。</div></div>
+  </div>
+
+  <h3>附录 C · 演示题库候选（奶茶店题材，待 P1 拍板后定稿）</h3>
+  <div class="tbl-scroll"><table>
+    <tr><th>#</th><th>演示问题（候选）</th><th>预期的"直觉反差"情节（由数据生成保证）</th><th>图型</th></tr>
+    <tr><td>1</td><td>哪家门店的 GMV 最高？</td><td>热身题：答案与"最大门店=最赚钱"直觉一致或相反而定</td><td>—</td></tr>
+    <tr><td>2</td><td>会员的客单价比非会员高多少？</td><td>会员更低——高频小额，挑战"会员=高消费"直觉</td><td>—</td></tr>
+    <tr><td>3</td><td>联名款上市后，经典款销量被蚕食了吗？</td><td>经典款基本盘稳定，蚕食的是自家其他新品</td><td>—</td></tr>
+    <tr><td>4</td><td>周末销量一定比工作日高吗？</td><td>办公区门店完全相反</td><td>—</td></tr>
+    <tr><td>5</td><td>评分最高的产品是卖得最好的吗？</td><td>"叫好不叫座"产品存在</td><td>—</td></tr>
+    <tr><td>6</td><td>新店爬坡期有多长？</td><td>第 6-8 周才达到老店日均的 80%</td><td>—</td></tr>
+    <tr><td>7</td><td>最近 7 天各门店 GMV 趋势</td><td>FR-09 图表演示主推题</td><td>折线</td></tr>
+    <tr><td>8</td><td>对比各品类销量</td><td>图表演示副题</td><td>柱状</td></tr>
+  </table></div>
+  <p class="small">定稿标准：8-10 题、每题有标准答案与人工核对记录、覆盖至少 2 题 chart 图型；题库文件随数据生成脚本版本化。</p>
+
+  <h3>附录 D · 评审自检记录</h3>
+  <div class="card"><ul style="list-style:none;padding-left:4px">
+    <li>☑ 15 段结构齐全（一~十五）</li>
+    <li>☑ 功能需求 FR-01~15 逐条编号 + GWT 验收</li>
+    <li>☑ 方案对比给出推荐结论 + 演进路径（5.4）</li>
+    <li>☑ 依赖评估三档分级 + 最晚就绪时限（13.2）</li>
+    <li>☑ 资金类专项：无资金场景，标注不适用（11 节）</li>
+    <li>☑ 涉及存量变更输出迁移方案：数据集替换迁移（FR-06 规则 3）</li>
+    <li>☑ 每个版本最小数据能力：评估报告可视化页（FR-10）即本期核心指标看板</li>
+    <li>☑ 异常处理清单覆盖空/错/断/超/滥用/泄露（12 节 E-01~E-12）</li>
+    <li>☑ 权限模型明确（11 节，公开只读 + 数据库只读账号）</li>
+    <li>☑ 状态词统一：必须/应该/可以/禁止；数值均标口径，估算处标注"估算"</li>
+    <li>☑ 附录含 RTM 与合规声明</li>
+  </ul></div>
+
+  <div class="footer">
+    <p>关联文档：定位分析报告（2026-10-08）· 仓库 docs/design/00~07 · 本 PRD 评审通过后即作为 v1.1 排期依据。</p>
+    <p>本 PRD 为产品设计参考，具体实施请结合自身目标与资源确认。</p>
+  </div>
+
+</div>
+</body>
+</html>

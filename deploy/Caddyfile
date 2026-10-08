@@ -1,0 +1,29 @@
+# Lucky 公网反代配置（v1.1 PRD FR-05 · Caddy + sslip.io）
+#
+# 用法：把 <SERVER_IP> 替换为服务器公网 IP，放到 /etc/caddy/Caddyfile，systemctl reload caddy
+# 证书：Caddy 对 <IP>.sslip.io 自动签发/续期 Let's Encrypt（HTTP-01，需 80 端口可达）
+# 验证（PRD W1 首日）：浏览器访问 https://<SERVER_IP>.sslip.io 无告警；失败按 E-10 切购域名
+#
+# 设计说明（why）：
+# - IP 限流与费用熔断在应用层（app/api/middleware/rate_limit.py），Caddy 只做 HTTPS 与转发
+# - /api/* 用 flush_interval -1 关闭缓冲，SSE 逐帧透传（不关会导致前端"卡住直到结束"）
+# - HTTP→HTTPS 跳转由 Caddy 自动处理（PRD 要求 301），无需显式 redir
+
+<SERVER_IP>.sslip.io {
+	# 前端：React 构建产物（pnpm build → frontend/dist）
+	root * /opt/lucky/frontend/dist
+	encode gzip
+
+	# 后端 API（SSE 流式）
+	handle /api/* {
+		reverse_proxy localhost:8000 {
+			flush_interval -1
+		}
+	}
+
+	# 前端 SPA 路由兜底
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}

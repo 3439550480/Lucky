@@ -8,6 +8,7 @@ SQL 执行节点
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
+from app.agent.nodes.error_messages import humanize_exec_error
 from app.agent.state import DataAgentState
 from app.core.log import logger
 
@@ -32,6 +33,11 @@ async def run_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]):
         return {"result": result}
 
     except Exception as e:
-        logger.error(f"{step} failed: {e}")
+        # [v1.1 FR-07 重写留档] 原版：logger 记录原始异常后直接 raise —— pymysql 内部
+        # 报错（表/字段/路径细节）经 QueryService 的 str(e) 原样推给前端，违反 FR-07
+        # "禁止输出堆栈与内部路径"。修复：源头人话化后重抛净化异常，日志仍留全量原文
+        # 供排查（两处分工：日志面向开发者，SSE 面向用户）。
+        friendly = humanize_exec_error(e)
+        logger.error(f"{step} failed: {e}")   # 完整异常只进日志
         writer({"type": "progress", "step": step, "status": "error"})
-        raise   # 重新抛出异常，让上层捕获
+        raise RuntimeError(friendly) from e   # 重抛净化文本，控制流与原版一致

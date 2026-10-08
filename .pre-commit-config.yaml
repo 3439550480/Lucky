@@ -1,0 +1,17 @@
+# pre-commit 密钥扫描（v1.1 PRD FR-03 防复发）
+#
+# 安装（一次性）：
+#   pip install pre-commit        # 或 uv tool install pre-commit
+#   pre-commit install            # 挂到 .git/hooks/pre-commit
+# 手动全量扫描（含全部历史）：
+#   pre-commit run gitleaks --all-files
+#
+# 说明：gitleaks 检测 AWS/GCP/私钥/通用 API Key 等 100+ 规则；
+# 10-07 误提交的 SSH 脚本类风险由"轮换 + 历史扫描"处置（docs/安全清理清单.md），
+# 本钩子防止同类问题再次进库。
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.28.0
+    hooks:
+      - id: gitleaks

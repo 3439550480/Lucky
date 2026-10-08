@@ -11,12 +11,17 @@ import uuid
 from fastapi import FastAPI, Request
 
 from app.api.lifespan import lifespan
+from app.api.middleware.rate_limit import demo_guard_middleware
 from app.api.routers.query_router import query_router
 from app.core.context import request_id_ctx_var
 
 app = FastAPI(lifespan=lifespan)
 
 app.include_router(query_router)
+
+# 公网防护中间件（v1.1 FR-05）：费用熔断前置检查 → IP 限流，仅拦 POST /api/query；
+# conf/app_config.yaml security 段默认全关 = 行为与 v1.0 完全一致
+app.middleware("http")(demo_guard_middleware)
 
 
 @app.middleware("http")

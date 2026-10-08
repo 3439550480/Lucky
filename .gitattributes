@@ -1,0 +1,7 @@
+# 行尾规范：bash 脚本必须 LF（CRLF 会让 Ubuntu 上 bash 报 \r 错误，破坏 FR-01 一键启动）
+*.sh text eol=lf
+*.py text eol=lf
+*.sql text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+Makefile text eol=lf

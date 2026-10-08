@@ -9,7 +9,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 # ==================== 配置 ====================
 QDRANT_HOST = "localhost"
 QDRANT_PORT = 6333
-EMBEDDING_MODEL = "D:/Code/PC-Project/SA/shopkeeper-agent/docker/embedding/bge-small-zh"
+EMBEDDING_MODEL = "docker/embedding/bge-small-zh"   # 相对项目根（Lucky），需在项目根目录下运行
 VECTOR_SIZE = 512
 COLLECTION_COLUMN = "column_info_collection"
 COLLECTION_METRIC = "metric_info_collection"

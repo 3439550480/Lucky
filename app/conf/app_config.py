@@ -103,6 +103,33 @@ class MemoryConfig:
     retrieval_top_k: int = 5             # 检索 topk
     similarity_threshold: float = 0.60   # 相似度阈值（bge-small-zh 校准：相关非改写对典型 0.6~0.8，0.80 漏召回）
 
+# ====== 公网 demo 防护（v1.1 PRD FR-05 / 十一节）======
+
+@dataclass
+class RateLimitConfig:
+    """IP 级限流（公网防滥用第一道闸）。
+    enabled=false 恒为旧行为（不拦截）；窗口为内存滑动窗口，进程重启即清零"""
+    enabled: bool = False      # 默认关闭 = 旧行为（Feature Flags 纪律）
+    per_minute: int = 10       # 单 IP 每分钟提问上限（PRD 估算初值，可按费用校准）
+
+
+@dataclass
+class CostGuardConfig:
+    """密钥日费用熔断（PRD FR-05 规则 3 / E-04）。
+    soft_limit 只告警；hard_limit 触发后当日暂停对外服务（429+公告文案），次日自动恢复。
+    计价口径与 03 评估一致：按"缓存未命中价"核算（pricing 配置复用 app_config.llm）"""
+    enabled: bool = False      # 默认关闭 = 旧行为
+    soft_limit: float = 5.0    # 元/天，软上限：写告警日志
+    hard_limit: float = 15.0   # 元/天，硬上限：自动暂停对外服务
+
+
+@dataclass
+class SecurityConfig:
+    """公网部署防护配置段（本地开发保持默认全关）。仅作用于 POST /api/query 问数入口"""
+    rate_limit: RateLimitConfig = field(default_factory=RateLimitConfig)
+    cost_guard: CostGuardConfig = field(default_factory=CostGuardConfig)
+
+
 # ====== 所有 dataclass 定义保持不变 ======
 @dataclass
 class File:
@@ -167,6 +194,7 @@ class AppConfig:
     features: FeatureFlags = field(default_factory=FeatureFlags)  # [NEW] 模块开关
     session: SessionConfig = field(default_factory=SessionConfig) # [NEW] 上下文管理
     memory: MemoryConfig = field(default_factory=MemoryConfig)    # [NEW] 记忆管理
+    security: SecurityConfig = field(default_factory=SecurityConfig)  # [NEW v1.1] 公网防护
 
 # ====================== 配置加载（修改部分） ======================
 # 修改：配置文件在项目根目录的 conf 文件夹下

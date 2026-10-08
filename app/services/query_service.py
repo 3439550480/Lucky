@@ -14,6 +14,7 @@ from app.agent.state import DataAgentState
 from app.agent.usage import LLMUsageTracker
 from app.conf.app_config import app_config
 from app.core.log import logger
+from app.services.cost_guard import cost_guard
 from app.repositories.es.value_es_repository import ValueESRepository
 from app.repositories.mysql.dw.dw_mysql_repository import DWMySQLRepository
 from app.repositories.mysql.meta.meta_mysql_repository import MetaMySQLRepository
@@ -128,6 +129,9 @@ class QueryService:
             # 请求结束输出用量汇总 —— 在线可观测 + 与 03 评估口径一致
             if tracker:
                 logger.info(f"LLM usage | {json.dumps(tracker.summary(), ensure_ascii=False)}")
+                # [v1.1 FR-05] 费用熔断记账 —— 开关关闭时 record() 内部直接返回 0，
+                # 零状态变更；计价与 03 报告同口径，方便在线离线对账
+                cost_guard.record(provider_name, tracker.records())
             # [06] 运行后记忆提取：响应已发送完毕，不阻塞用户；双重开关（long_term + extract_after_run）
             if (self.memory_store
                     and app_config.features.memory.long_term

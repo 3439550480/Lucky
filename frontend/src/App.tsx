@@ -10,7 +10,6 @@ import { EmptyState } from "./components/EmptyState";
 import { MessageBubble } from "./components/MessageBubble";
 import SessionSidebar from "./components/SessionSidebar";
 import ThemeToggle from "./components/ThemeToggle";
-import ManualPage from "./components/ManualPage";
 import { streamQuery } from "./lib/agentApi";
 import { fetchCapabilities, fetchModels, isAbortError } from "./lib/agentApi";
 import { cn, summarizeResult, uuid } from "./lib/format";
@@ -49,7 +48,6 @@ export default function App() {
   const { theme, toggle: toggleTheme } = useTheme();
   const [draft, setDraft] = useState("");
   const [activeController, setActiveController] = useState<AbortController | null>(null);
-  const [showManual, setShowManual] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // ==== 模型与能力芯片（02 文档 §3.6：模型=localStorage 跨会话偏好；thread_id=sessionStorage 会话隔离）====
@@ -96,15 +94,6 @@ export default function App() {
     if (name) localStorage.setItem("agent_capability", name);
     else localStorage.removeItem("agent_capability");
   };
-
-  // 首次访问自动显示手册
-  useEffect(() => {
-    const hasVisited = localStorage.getItem("hasVisitedManual");
-    if (!hasVisited) {
-      setShowManual(true);
-      localStorage.setItem("hasVisitedManual", "true");
-    }
-  }, []);
 
   const isStreaming = Boolean(activeController);
   const canSubmit = draft.trim().length > 0 && !isStreaming;
@@ -227,11 +216,6 @@ export default function App() {
     deleteSession(id);
   };
 
-  // 如果显示手册页面，直接渲染手册组件（全屏，无聊天界面）
-  if (showManual) {
-    return <ManualPage onClose={() => setShowManual(false)} />;
-  }
-
   // 正常聊天界面
   return (
     <div className="h-dvh overflow-hidden bg-bg text-content">
@@ -260,14 +244,6 @@ export default function App() {
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => setShowManual(true)}
-                className="grid h-9 w-9 place-items-center rounded-full text-muted transition hover:bg-surface-2 hover:text-content"
-                title="操作手册"
-                aria-label="操作手册"
-              >
-                📘
-              </button>
               <ThemeToggle theme={theme} onToggle={toggleTheme} />
               <button
                 type="button"

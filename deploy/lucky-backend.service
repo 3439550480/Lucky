@@ -1,0 +1,31 @@
+# Lucky 后端 systemd 守护单元（v1.1 PRD FR-05 / E-05 进程崩溃 ≤30s 自动恢复）
+#
+# 安装：
+#   sudo cp deploy/lucky-backend.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now lucky-backend
+# 验证（FR-05 GWT）：sudo systemctl kill -s KILL lucky-backend 后 30s 内
+#   curl -s https://<IP>.sslip.io/api/models 返回 200
+#
+# 说明（why）：
+# - WorkingDirectory 必须是仓库根（app_config/conf/prompts 均按根目录相对路径解析）
+# - ExecStart 用 uv run（复用 .venv 与 pyproject 依赖，避免另一套部署依赖漂移）
+# - Restart=always + RestartSec=5：kill 后约 5-15s 恢复，满足 ≤30s GWT
+
+[Unit]
+Description=Lucky backend (FastAPI + LangGraph)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lucky
+WorkingDirectory=/opt/lucky
+ExecStart=/home/lucky/.local/bin/uv run uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+# 密钥只经 .env（权限 600，属主 lucky）注入，不出现在单元文件里（十一节密钥管理）
+StandardOutput=append:/opt/lucky/logs/backend.log
+StandardError=append:/opt/lucky/logs/backend.log
+
+[Install]
+WantedBy=multi-user.target

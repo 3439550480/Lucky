@@ -1,17 +1,14 @@
 # Lucky
 
-基于 FastAPI + LangGraph 的通用智能助手平台，核心能力为电商问数（Text2SQL）：
-自然语言提问 → 能力路由 → 多路召回（Qdrant 向量 + ES 全文）→ LLM 生成 SQL → 校验执行 → SSE 流式推送结果与解释。
+基于 FastAPI + LangGraph 的电商问数 Agent 工程范本——五级能力路由 / KV cache 友好上下文 / 长期记忆 / 量化评估与 Feature Flags 对照实验的完整落地。
 
-架构特性：能力路由（规则 → embedding → LLM 三级递进，可插拔）、上下文管理与 KV cache 友好提示词（固定前缀 + 追加式历史）、长期记忆（Simple Notes + Memory Cards）、评估框架（检索/意图/SQL/成本/基础回忆五维指标 + Feature Flags 对照实验）、模型可切换（DeepSeek / Qwen / GLM，前端选择）。
+自然语言提问 → 能力路由（规则 → embedding → LLM 三级递进，可插拔）→ 多路召回（Qdrant 向量 + ES 全文）→ LLM 生成 SQL → 校验执行 → SSE 流式推送结果与解释。
 
 ## 快速启动
 
-1. 依赖服务：`docker compose -f docker/docker-compose.yaml up -d`（mysql 映射 **3307**；首次启动自动执行 docker/mysql/*.sql 初始化）
-2. 配置：`.env` 填入 DEEPSEEK_API_KEY / DASHSCOPE_API_KEY / ZHIPU_API_KEY（.env 是唯一密钥来源，已 gitignore）；`conf/app_config.yaml`（Feature Flags 等）；`conf/capability_config.yaml`（能力注册表）
-3. 构建元数据知识库：`uv run python -m app.scripts.build_meta_knowledge`
-4. 后端：`uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000`
-5. 前端：`cd frontend && pnpm install && pnpm dev`
+1. 依赖服务：`docker compose -f docker/docker-compose.yaml up -d`（mysql 映射 **3307**，首次启动自动执行 docker/mysql/*.sql 初始化）
+2. 配置：`.env` 填入至少一家模型 Key（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY / ZHIPU_API_KEY 任一；.env 是唯一密钥来源，已 gitignore）
+3. 建库：`uv run python -m app.scripts.build_meta_knowledge` → 后端：`uv run uvicorn main:app --host 0.0.0.0 --port 8000` → 前端：`cd frontend && pnpm install && pnpm dev`
 
 ## 评估（Agent 质量量化）
 

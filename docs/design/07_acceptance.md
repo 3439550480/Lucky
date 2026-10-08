@@ -163,7 +163,7 @@ uv run python -m app.scripts.run_evaluation -e compare `
 
 1. 各文档状态最终核对：00~06 final、07 本文 final
 2. `README.md` 更新：新架构说明（能力路由/上下文/记忆/评估/开关体系）、启动步骤（含 3307 端口与三个 API Key）、设计文档索引
-3. 全部文档 + 代码推送 GitHub（`3439550480/Shopkeeper-Agent`）
+3. 全部文档 + 代码推送 GitHub（`3439550480/Lucky`）
 4. `.env` / `data/memory/` / 日志确认不在推送内容中
 
 ---
