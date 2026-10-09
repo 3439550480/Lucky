@@ -12,6 +12,8 @@
 """
 
 import uuid
+import datetime
+import decimal
 from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
@@ -53,6 +55,24 @@ class MetaKnowledgeService:
         self.metric_qdrant_repository = metric_qdrant_repository
 
     # ========== 表与字段入库 ==========
+
+    @staticmethod
+    def _normalize_example(v) -> object:
+        """DB 原生对象 → JSON 可序列化值。
+
+        [规则3 留档] 原版：examples 原样透传 DB 驱动对象。
+        缺陷：数据集引入 DATE 列（open_date 等）后 datetime.date 无法 JSON 序列化，
+        DECIMAL 列（order_amount）同理，建库直接失败（2026-10-08 实测）。
+        修复：入库前统一归一化 —— 日期转 ISO 字符串、Decimal 转 float、bytes 解码。
+        """
+        if isinstance(v, (datetime.datetime, datetime.date)):
+            return v.isoformat()
+        if isinstance(v, decimal.Decimal):
+            return float(v)
+        if isinstance(v, bytes):
+            return v.decode("utf-8", errors="replace")
+        return v
+
     async def _save_tables_to_meta_db(self, meta_config: MetaConfig) -> list[ColumnInfo]:
         table_infos: list[TableInfo] = []
         column_infos: list[ColumnInfo] = []
@@ -77,7 +97,7 @@ class MetaKnowledgeService:
                     name=column.name,
                     type=column_types[column.name],
                     role=column.role,
-                    examples=column_values,
+                    examples=[self._normalize_example(v) for v in column_values],
                     description=column.description,
                     alias=column.alias,
                     table_id=table.name,

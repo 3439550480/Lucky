@@ -1,3 +1,5 @@
+> ⚠️ 域示例说明（2026-10-09）：本文档中的电商/奶茶店业务示例已随项目定位切换（安踏特卖店 2.0）过时；架构条款、接口契约与机制定义仍然有效，以本文档为准。
+
 # 06 · 记忆管理（M6）
 
 > 状态：`final`（已实现并回归通过）　|　上位文档：[00_overview.md](00_overview.md)（final）、[05_context_management.md](05_context_management.md)（final）

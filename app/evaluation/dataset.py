@@ -21,6 +21,8 @@ class EvaluationCase:
     k: int = 5                         # 继承 defaults
     notes: str = ""
     memory_setup: dict | None = None   # [06] 基础回忆用例：{"setup_runs": [...], "expected_recall": [...], "expect_note": bool}
+    dialogue: list[str] | None = None  # [v1.1] 多轮对话用例：逐轮同 thread_id 顺序执行（SParC/CHASE 范式）；
+                                       # expected/golden_sql 只对最后一轮评估，历史经 context_store 自然承接
 
 
 @dataclass
@@ -70,8 +72,8 @@ def load_dataset(path: Path) -> EvaluationDataset:
         if case_id in seen_ids:
             raise _err(hint, f"用例 id 重复：{case_id}")
         seen_ids.add(case_id)
-        if not item.get("query"):
-            raise _err(hint, f"用例 {case_id} 缺少必填字段 query")
+        if not item.get("query") and not item.get("dialogue"):
+            raise _err(hint, f"用例 {case_id} 缺少必填字段 query（多轮用例可用 dialogue 替代）")
         if item.get("enabled") is None:
             raise _err(hint, f"用例 {case_id} 缺少必填字段 enabled（骨架占位机制依赖它）")
         expected = item.get("expected") or {}
@@ -91,6 +93,15 @@ def load_dataset(path: Path) -> EvaluationDataset:
                 v = mem.get(list_key)
                 if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
                     raise _err(hint, f"用例 {case_id} 的 memory_setup.{list_key} 必须为 list[str]")
+        # [v1.1] dialogue 多轮校验：非空 list[str]，且与 query 至少有一者存在
+        dlg = item.get("dialogue")
+        if dlg is not None:
+            if not isinstance(dlg, list) or not dlg or not all(isinstance(x, str) and x.strip() for x in dlg):
+                raise _err(hint, f"用例 {case_id} 的 dialogue 必须为非空 list[str]")
+            if not item.get("query"):
+                item["query"] = dlg[-1]           # target = 最后一轮（query 缺省取末轮，兼容下游）
+            if len(dlg) < 2:
+                raise _err(hint, f"用例 {case_id} 的 dialogue 至少需要 2 轮（单轮请直接用 query）")
 
         if not item["enabled"]:
             disabled_count += 1
@@ -104,6 +115,7 @@ def load_dataset(path: Path) -> EvaluationDataset:
             k=item.get("k", k),
             notes=item.get("notes", ""),
             memory_setup=item.get("memory_setup"),
+            dialogue=dlg,
         ))
 
     return EvaluationDataset(

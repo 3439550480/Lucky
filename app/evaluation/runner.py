@@ -142,8 +142,12 @@ class EvaluationRunner:
                     error="memory.long_term=false，memory 用例跳过（06 §5）")
             return await self._run_memory_case(
                 case, tracker, meta_mgr, dw_mgr, qdrant_mgr, emb_mgr, value_es_repo)
+        # [v1.1] 多轮对话：dialogue 逐轮同 thread_id 顺序执行 —— 历史经 context_store 承接
+        # （与在线多会话完全同机制），指代消解/条件继承在后续轮自然生效；
+        # expected/golden_sql 只对最后一轮评估，成本/延迟覆盖全部轮次（共享 tracker）
+        turns = case.dialogue or [case.query]
         state = DataAgentState(                          # 与 query_service.query() 初始值严格一致
-            query=case.query, keywords=[],
+            query=turns[0], keywords=[],
             retrieved_column_infos=[], retrieved_metric_infos=[], retrieved_value_infos=[],
             table_infos=[], metric_infos=[], error="", sql="", retry_count=0,
             messages=[], intent="", intent_reply="",
@@ -171,9 +175,22 @@ class EvaluationRunner:
                 config: dict = {"configurable": {"thread_id": thread_id}}
                 if app_config.features.usage_tracking:
                     config["callbacks"] = [tracker]
-                final_state = await graph.ainvoke(
-                    input=state, context=context,
-                    config=config)
+                final_state = None
+                for i, turn in enumerate(turns):
+                    if i > 0:
+                        # 后续轮重建 state（只带本轮 query；历史在 context_store 里，
+                        # 与在线 QueryService 每请求新建 state 完全同构）
+                        state = DataAgentState(
+                            query=turn, keywords=[],
+                            retrieved_column_infos=[], retrieved_metric_infos=[], retrieved_value_infos=[],
+                            table_infos=[], metric_infos=[], error="", sql="", retry_count=0,
+                            messages=[], intent="", intent_reply="",
+                            requested_capability="", capability="", capability_source="", tool_calls=[],
+                        )
+                        logger.info(f"[eval] 用例 {case.id} 第 {i + 1}/{len(turns)} 轮: {turn}")
+                    final_state = await graph.ainvoke(
+                        input=state, context=context,
+                        config=config)
         except Exception as e:                           # 单用例失败不中断（§3.6 容错）
             logger.warning(f"[eval] 用例 {case.id} 图执行失败: {e}")
             return CaseResult(

@@ -138,6 +138,14 @@ def _cases_detail(results: list[CaseResult], meta: dict) -> list[dict]:
         if r.tracker_summary:
             item["cost"] = compute_case_cost(r.tracker_records, r.tracker_summary,
                                              provider_cfg, meta.get("forced_tier"))
+        # [v1.1] 逐例 SQL 明细（与聚合 compute_sql_metrics 同口径，排查"哪题错"用）
+        smi = r.sql_metrics_input or {}
+        if smi:
+            from app.evaluation.sql_metrics import results_equal
+            item["sql_executed"] = bool(smi.get("executed"))
+            item["retries"] = smi.get("retry_count", 0)
+            if smi.get("has_golden") and smi.get("executed") and smi.get("golden_rows") is not None:
+                item["sql_correct"] = results_equal(smi.get("golden_rows"), smi.get("actual_rows"))
         out.append(item)
     return out
 

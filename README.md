@@ -1,8 +1,10 @@
 # Lucky
 
-基于 FastAPI + LangGraph 的电商问数 Agent 工程范本——五级能力路由 / KV cache 友好上下文 / 长期记忆 / 量化评估与 Feature Flags 对照实验的完整落地。
+基于 FastAPI + LangGraph 的连锁奶茶店问数 Agent 工程范本——五级能力路由 / KV cache 友好上下文 / 长期记忆 / 多轮对话 / 量化评估与 Feature Flags 对照实验的完整落地。
 
 自然语言提问 → 能力路由（规则 → embedding → LLM 三级递进，可插拔）→ 多路召回（Qdrant 向量 + ES 全文）→ LLM 生成 SQL → 校验执行 → SSE 流式推送结果与解释。
+
+> 演示数据为程序生成的连锁奶茶店销售数据集（2025 全年 45,654 单，10 门店 / 15 产品 / 60 会员，含预设分析情节），非真实经营数据；由 `app/scripts/generate_milktea_data.py` 一条命令重建。
 
 ## 快速启动
 

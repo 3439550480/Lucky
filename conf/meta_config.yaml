@@ -1,287 +1,229 @@
-#要同步哪些表
-#每张表有哪些字段
-#字段的角色、描述、别名是什么
-#哪些字段后续还要同步真实取值
-#哪些指标要进入知识库
+# ============================================================
+# 元数据知识库配置 —— 连锁奶茶店数据集（v1.1 FR-06 重写）
+# [规则3 留档] 旧版（电商 5 表 + 10 指标）已随数据集替换整体废弃，
+# 历史版本见 git（commit e39d96d 之前）。
+# 字段语义与 docker/mysql/dw.sql（由 generate_milktea_data.py 生成）逐字对应。
+# ============================================================
 
-#配置驱动:脚本本身不写死业务范围，而是由配置文件来决定这次要同步什么内容。
-#不是所有表都值得同步,数仓内容将来一定会有增量变化,字段是否同步真实取值也应该是可配的...
-
-
-#tables 是一个列表，列表里的每个元素都表示一张要同步的表。
-#
-#每张表至少包含这几个信息：
-#
-#name：表名
-#role：这张表是维度表还是事实表
-#description：这张表的业务含义
-#columns：这张表下哪些字段要进入知识库
-#这里的 role 也很关键：
-#
-#dim：维度表
-#fact：事实表
-
-
-#    columns 也是一个列表，里面每个元素都表示一个字段。
-#
-#    每个字段主要有 5 个配置：
-#
-#    name：字段名
-#    role：字段角色
-#    description：字段业务含义
-#    alias：字段别名
-#    sync：是否同步真实取值到 Elasticsearch
-#    字段级 role 一般有这几种：
-#
-#    primary_key
-#    foreign_key
-#    dimension
-#    measure
-#    这里的 alias 很重要，因为用户提问时经常不会直接说真实字段名，而会说业务口语。
-#    例如 order_amount 的别名可以是：销售额、订单金额、收入。
 tables:
-  - name: dim_region
+  - name: dim_store
     role: dim
-    description: 地区维度表。注意表的行粒度是省级：一行 = 一个省（region_id 主键），region_name 是大区标签（如华东由浙江/上海/江苏/福建/山东/安徽等多个省的 region_id 共享）。按大区/地区统计时必须只按 region_name 分组，禁止把 region_id 加入 GROUP BY（否则大区被碎片化，排名/最值类查询会得到错误结果）。
+    description: 门店维度表。一行 = 一家门店。store_type 是门店商圈类型（办公区/社区/商场）——注意：办公区门店的销量模式与社区/商场相反（工作日高、周末低），按"周末 vs 工作日"分析时不要跨类型混合解读。部分门店 2025 年内开业（open_date 晚），存在爬坡期，"哪家门店销量最高"类问题应结合 open_date 解读。
     columns:
-      - name: region_id
+      - name: store_id
         role: primary_key
-        description: 省级地区唯一标识（一行 = 一个省）。注意：一个 region_name（大区）对应多个 region_id，按大区聚合统计时禁止对 region_id 分组。
-        alias: [地区ID, 区域ID]
+        description: 门店唯一标识。
+        alias: [门店ID]
         sync: false
-
-      - name: province
+      - name: store_name
         role: dimension
-        description: 订单所属的省份名称。
-        alias: [省份, 省, 所在省份]
+        description: 门店名称（含商圈特征，如"国贸写字楼店"）。
+        alias: [门店名称, 门店, 店名]
         sync: true
-
-      - name: region_name
+      - name: city
         role: dimension
-        description: 大区名称（华东/华南/华北/华中/西南/西北/东北）。一个大区由多个省的 region_id 组成——用户说的"地区"就是此列；按地区/大区统计时只能按此列 GROUP BY，不要把 region_id 加入分组。
-        alias: [地区, 区域, 大区]
+        description: 门店所在城市（北京/上海/广州/深圳/成都/重庆/杭州）。
+        alias: [城市, 所在城市]
         sync: true
-
-      - name: country
+      - name: store_type
         role: dimension
-        description: 地区所属国家名称。
-        alias: [国家, 国家名称]
+        description: 门店商圈类型：办公区（工作日高、周末显著低）、社区、商场（周末高于工作日）。"周末销量比工作日高吗"类问题的答案取决于此列，必须按类型分别统计。
+        alias: [门店类型, 商圈类型, 店型]
         sync: true
-#        sync: true：表示这个字段的真实取值需要同步到 Elasticsearch
-#        sync: false：表示只保留字段元信息，不同步真实取值
-
-  - name: dim_customer
-    role: dim
-    description: 客户维度表，描述下单客户的基本属性。
-    columns:
-      - name: customer_id
-        role: primary_key
-        description: 客户唯一标识。
-        alias: [客户ID, 用户ID]
+      - name: open_date
+        role: dimension
+        description: 门店开业日期。2025 年内开业的门店（科技园店/来福士店/解放碑社区店）前 8 周处于爬坡期，销量天然偏低。
+        alias: [开业日期, 开业时间]
+        sync: true
+      - name: staff_count
+        role: dimension
+        description: 门店员工人数（门店规模参考，非销量直接决定因素）。
+        alias: [员工人数, 店员数量]
         sync: false
-
-      - name: customer_name
-        role: dimension
-        description: 客户名称。
-        alias: [客户名称, 用户名称]
-        sync: true
-
-      - name: gender
-        role: dimension
-        description: 客户性别。
-        alias: [性别]
-        sync: true
-
-      - name: member_level
-        role: dimension
-        description: 客户会员等级。
-        alias: [会员等级, 用户等级]
-        sync: true
 
   - name: dim_product
     role: dim
-    description: 商品维度表，描述商品的基本属性信息。
+    description: 产品维度表。一行 = 一款在售饮品。注意 rating（评分）与销量无必然关系——评分最高的产品可能销量垫底（"叫好不叫座"）。is_cobrand=是 的联名款均为 2025 年上市的新品。
     columns:
       - name: product_id
         role: primary_key
-        description: 商品唯一标识。
-        alias: [商品ID, 产品ID]
+        description: 产品唯一标识。
+        alias: [产品ID, 商品ID]
         sync: false
-
       - name: product_name
         role: dimension
-        description: 商品名称。
-        alias: [商品名称, 产品名称]
+        description: 产品名称。
+        alias: [产品名称, 商品名称, 饮品名称, 奶茶名]
         sync: true
-
       - name: category
         role: dimension
-        description: 商品所属品类。
-        alias: [商品类别, 品类, 分类]
+        description: 产品品类：经典奶茶/果茶/咖啡/联名款。
+        alias: [品类, 产品类别, 分类]
         sync: true
-
-      - name: brand
+      - name: unit_price
+        role: measure
+        description: 单杯标价（元）。订单金额 = unit_price × order_quantity。
+        alias: [单价, 价格, 标价]
+        sync: false
+      - name: rating
+        role: measure
+        description: 平台评分（0~5，一位小数）。评分与销量无相关性——存在评分最高但销量垫底的产品。
+        alias: [评分, 得分, 口碑分]
+        sync: false
+      - name: launch_date
         role: dimension
-        description: 商品品牌名称。
-        alias: [品牌, 品牌名称]
+        description: 产品上市日期。用于区分经典款（2025 年前上市）与新品/联名款。
+        alias: [上市日期, 上市时间, 上架时间]
+        sync: false
+      - name: is_cobrand
+        role: dimension
+        description: 是否联名款（是/否）。联名款 2025-06 起陆续上市，上市后抢走的是同期其它新品（果茶/咖啡类 2025 新品）的销量，经典款基本盘稳定。
+        alias: [是否联名, 联名款, 联名]
         sync: true
 
   - name: dim_date
     role: dim
-    description: 时间维度表，用于多时间粒度分析。
+    description: 日期维度表，一行 = 一天（2025 全年 365 天）。is_weekend（是/否）直接支撑"周末 vs 工作日"分析；跨表统计日期相关问题时经 date_id 关联。
     columns:
       - name: date_id
         role: primary_key
         description: 日期唯一标识，格式 yyyyMMdd。
         alias: [日期ID, 日期]
         sync: false
-
       - name: year
         role: dimension
-        description: 年份。
+        description: 年份（2025）。
         alias: [年, 年份]
         sync: false
-
       - name: quarter
         role: dimension
-        description: 季度。
+        description: 季度（Q1~Q4）。
         alias: [季度]
         sync: true
-
       - name: month
         role: dimension
-        description: 月份。
+        description: 月份（1~12）。
         alias: [月, 月份]
         sync: false
-
       - name: day
         role: dimension
-        description: 日。
+        description: 日（1~31）。
         alias: [日, 天]
         sync: false
+      - name: weekday
+        role: dimension
+        description: 星期几（星期一~星期日）。
+        alias: [星期, 周几, 星期几]
+        sync: true
+      - name: is_weekend
+        role: dimension
+        description: 是否周末（是/否）。"周末 vs 工作日"问题优先用此列分组；结论必须结合门店类型解读（办公区门店周末反而最低）。
+        alias: [是否周末, 周末]
+        sync: true
 
-  - name: fact_order
+  - name: dim_member
+    role: dim
+    description: 会员维度表。一行 = 一位注册会员。注意：fact_orders 中 member_id 为 NULL 的订单是非会员匿名下单——"会员 vs 非会员"对比时，非会员不是 member_level 的某个取值，而是 member_id IS NULL。
+    columns:
+      - name: member_id
+        role: primary_key
+        description: 会员唯一标识。注意与 fact_orders.member_id 关联；NULL 语义见 fact_orders 表说明。
+        alias: [会员ID]
+        sync: false
+      - name: member_name
+        role: dimension
+        description: 会员昵称（脱敏展示）。
+        alias: [会员名称, 会员昵称]
+        sync: true
+      - name: member_level
+        role: dimension
+        description: 会员等级：普通/白银/黄金。
+        alias: [会员等级, 等级]
+        sync: true
+      - name: register_date
+        role: dimension
+        description: 会员注册日期（多数为 2024 年老会员）。
+        alias: [注册日期, 注册时间]
+        sync: false
+
+  - name: fact_orders
     role: fact
-    description: 订单事实表，记录订单数量和金额等核心指标。
+    description: 订单事实表，一行 = 一笔饮品销售小票。member_id 为 NULL 表示非会员匿名下单（"会员 vs 非会员"对比的关键：非会员 = member_id IS NULL，而不是某个等级）。channel 区分堂食/外卖。订单金额 = 产品单价 × 数量。
     columns:
       - name: order_id
         role: primary_key
         description: 订单唯一标识。
-        alias: [订单ID]
+        alias: [订单ID, 小票号]
         sync: false
-
-      - name: customer_id
+      - name: store_id
         role: foreign_key
-        description: 关联客户维度的外键。
-        alias: [客户ID, 用户ID]
+        description: 关联门店维度的外键。
+        alias: [门店ID]
         sync: false
-
       - name: product_id
         role: foreign_key
-        description: 关联商品维度的外键。
-        alias: [商品ID, 产品ID]
+        description: 关联产品维度的外键。
+        alias: [产品ID, 商品ID]
         sync: false
-
       - name: date_id
         role: foreign_key
-        description: 关联时间维度的外键。
-        alias: [日期, 下单日期]
+        description: 关联日期维度的外键（yyyyMMdd）。
+        alias: [日期, 下单日期, 销售日期]
         sync: false
-
-      - name: region_id
+      - name: member_id
         role: foreign_key
-        description: 关联地区维度的外键。
-        alias: [地区ID, 区域ID]
+        description: 关联会员维度的外键；【可空】NULL = 非会员匿名下单。统计"非会员"指标时必须用 member_id IS NULL，不能 JOIN dim_member（会漏掉全部非会员订单）。
+        alias: [会员ID]
         sync: false
-
+      - name: channel
+        role: dimension
+        description: 下单渠道：堂食/外卖。
+        alias: [渠道, 下单渠道, 堂食外卖]
+        sync: true
       - name: order_quantity
         role: measure
-        description: 订单中商品的购买数量。
-        alias: [销量, 购买数量, 件数]
+        description: 本单饮品杯数。
+        alias: [销量, 杯数, 数量, 购买数量]
         sync: false
-
       - name: order_amount
         role: measure
-        description: 订单金额。
-        alias: [销售额, 订单金额, 收入]
+        description: 订单实收金额（元）。
+        alias: [销售额, 订单金额, 营业额, 收入]
         sync: false
 
 metrics:
   - name: GMV
-    description: 全称Gross Merchandise Value，表示所有订单的成交金额总和。
+    description: 指定范围内所有订单的实收金额总和（元）。
     relevant_columns:
-      - fact_order.order_amount
-    alias: [成交总额, 订单总额]
+      - fact_orders.order_amount
+    alias: [营业额, 销售额, 订单总额, 成交总额]
   - name: AOV
-    description: 全称Average Order Value，表示所有订单的成交金额平均值。
+    description: 客单价，所有订单实收金额的平均值（元/单）。
     relevant_columns:
-      - fact_order.order_amount
-    alias: [平均单价, 平均订单金额]
-  # --- 1. 用户类新增指标 ---
-  - name: Repeat Purchase Rate
-    description: 指在特定周期内，发生多次购买行为的消费者占比，直接体现了平台或店铺的用户黏性和忠诚度。
-    relevant_columns:
-      - fact_order.customer_id
-    alias: [ 复购率, 重复购买率, RPR, 用户留存 ]
-
-  - name: Customer Lifetime Value
-    description: 指每个客户在其整个生命周期内能够为平台带来的总价值。在这里简化为总销售额除以总客户数，用于评估客户群体的平均价值。
-    relevant_columns:
-      - fact_order.order_amount
-    alias: [ 客户生命周期价值, 客户总价值, LTV, CLV ]
-
-  - name: Repurchase Frequency
-    description: 指每个购买客户的平均下单次数。
-    relevant_columns:
-      - fact_order.customer_id
-    alias: [ 人均购买频次, 复购频率, RF ]
-
-  # --- 2. 运营类新增指标 ---
+      - fact_orders.order_amount
+    alias: [平均订单金额, 客单价, 平均单价]
   - name: Total Orders
-    description: 指定时间段内，平台实际成交的订单总数量。
+    description: 指定范围内的订单总数量（单）。
     relevant_columns:
-      - fact_order.order_id
-    alias: [ 总订单数, 订单量, Order Count ]
-
-  - name: Conversion Rate
-    description: 访客最终完成购买行为的比例，即“订单数”与“访客数”的比率，是衡量流量变现效率的核心指标。
+      - fact_orders.order_id
+    alias: [订单量, 订单数, 总订单数]
+  - name: Sales Volume
+    description: 指定范围内售出的饮品杯数总和（杯）。
     relevant_columns:
-      - fact_order.order_id
-    alias: [ 转化率, CVR, 成交转化率 ]
-
+      - fact_orders.order_quantity
+    alias: [销量, 销售杯数, 卖出杯数]
+  - name: Member Penetration Rate
+    description: 会员订单占比 = 会员下单量 ÷ 总下单量（非会员为 member_id IS NULL 的订单）。
+    relevant_columns:
+      - fact_orders.member_id
+    alias: [会员占比, 会员渗透率, 会员下单占比]
+  - name: Repeat Purchase Rate
+    description: 复购率 = 下单 ≥2 次的去重会员数 ÷ 总去重会员数。
+    relevant_columns:
+      - fact_orders.member_id
+    alias: [复购率, 重复购买率]
   - name: Average Items Per Order
-    description: 指每一笔订单中平均包含的商品件数，反映了商品组合和交叉销售的效果。
+    description: 连带率 = 杯数总和 ÷ 订单数（平均每单几杯）。
     relevant_columns:
-      - fact_order.order_quantity
-    alias: [ 连带率, 客件数, AIPO, 笔单价 ]
-
-  # --- 3. 商品类新增指标 ---
-  - name: Per-SKU Sales
-    description: 指特定商品或商品品类所产生的销售额总和，用于识别畅销品与库存规划。
-    relevant_columns:
-      - fact_order.order_amount
-    alias: [ 商品销售额, 单品销售额, 品类销售额, Product Sales, Category Sales ]
-#    这里的 relevant_columns 很重要，因为它把“指标”和“底层字段”连接起来了。后面往元数据库写数据时，column_metric 这张关系表就是根据这个字段来生成的。
-
-#为什么不配置 type 和 examples:能通过程序自动查到的信息，就尽量不要再让用户手工填写。
-#tables:
-#  - name: fact_order
-#    role: fact
-#    description: "订单事实表"
-#    columns:
-#      - name: order_id
-#        role: primary_key
-#        alias: ["订单ID"]
-#        description: "订单ID"
-#        sync: false
-#      - name: customer_id
-#        role: foreign_key
-#        alias: ["客户ID"]
-#        description: "客户ID"
-#        sync: false
-#      - name: order_amount
-#        role: measure
-#        alias: ["销售额", "收入"]
-#        description: "销售额"
-#        sync: false
-#metrics: []
+      - fact_orders.order_quantity
+    alias: [连带率, 客件数, 平均每单杯数]
