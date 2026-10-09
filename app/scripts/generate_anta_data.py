@@ -18,6 +18,7 @@
 合规声明：商品名与吊牌价来自安踏官方商城公开信息（仅学习用途）；货号/色码/
 库存/销售均为按规则生成的仿真数据，不代表安踏真实经营情况。
 """
+import hashlib
 import random
 import re
 from datetime import date, timedelta
@@ -234,6 +235,11 @@ def build_inventory(skus: list[dict], sales: list[dict], spus_by_id: dict):
         for k in skus:
             snapshots.append({"snapshot_date": date_id, "sku_id": k["sku_id"],
                               "book_qty": stock[k["sku_id"]], "available_qty": stock[k["sku_id"]]})
+    op_ids = {"补货入库-早班": "K001", "补货入库-晚班": "K001",
+              "退货入库": "S001", "报损出库": "K001", "销售出库": None}
+    for f in flows:
+        f["operator_id"] = op_ids.get(f["flow_type"])
+        f["idempotency_key"] = f["doc_no"] + ":" + f["sku_id"] + ":" + f["flow_type"]
     return snapshots, flows
 
 
@@ -263,6 +269,38 @@ def build_dim_date() -> list[dict]:
 # ============================================================================
 # SQL 输出：DDL + 分批 INSERT（无百分号字符，规避传输层限制）
 # ============================================================================
+
+
+def build_staff() -> list[dict]:
+    """dim_staff 初始名单（权限文档 5.9 定稿 14 条）；凭据=加盐哈希，演示统一 PIN 123456"""
+    spec = [
+        ("M001", "王志远", "MANAGER", "启用", "2024-03-01", None, "2024-03-01", None),
+        ("K001", "李慧", "STAFF,KEEPER", "启用", "2024-05-15", None, "2024-05-15", None),
+        ("S001", "陈明", "STAFF", "启用", "2025-03-10", None, "2025-03-10", None),
+        ("S002", "赵雪", "STAFF", "启用", "2025-03-10", None, "2025-03-10", None),
+        ("S003", "刘洋", "STAFF", "启用", "2025-08-01", None, "2025-08-01", None),
+        ("S004", "孙倩", "STAFF", "启用", "2025-08-01", None, "2025-08-01", None),
+        ("S005", "郑凯", "STAFF", "启用", "2026-01-05", None, "2026-01-05", None),
+        ("S006", "马琳", "STAFF", "启用", "2026-01-05", None, "2026-01-05", None),
+        ("T001", "周小雨", "TEMP", "启用", "2026-09-28", "2026-10-12", "2026-09-28", None),
+        ("T002", "吴强", "TEMP", "启用", "2026-09-28", "2026-10-12", "2026-09-28", None),
+        ("T003", "何静", "TEMP", "启用", "2026-09-28", "2026-10-12", "2026-09-28", None),
+        ("T004", "林浩", "TEMP", "启用", "2026-09-28", "2026-10-12", "2026-09-28", None),
+        ("S007", "高翔", "STAFF", "停用", "2025-02-10", None, "2025-02-10", "2026-09-15"),
+        ("T005", "徐婷", "TEMP", "启用", "2026-08-01", "2026-08-31", "2026-08-01", None),
+    ]
+    rows = []
+    for sid, name, roles, status, vfrom, vto, hire, leave in spec:
+        salt = format(rng.getrandbits(64), "016x")
+        digest = hashlib.sha256((salt + "123456").encode("utf-8")).hexdigest()
+        rows.append({"staff_id": sid, "name": name, "role_codes": roles,
+                     "credential_hash": "sha256$" + salt + "$" + digest,
+                     "status": status, "valid_from": vfrom, "valid_to": vto,
+                     "hire_date": hire, "leave_date": leave, "created_by": "M001",
+                     "created_at": "2026-09-28 09:00:00",
+                     "updated_at": "2026-09-28 09:00:00"})
+    return rows
+
 def _esc(v) -> str:
     if v is None:
         return "NULL"
@@ -315,6 +353,22 @@ CREATE TABLE dim_product
     prod_year    VARCHAR(4) COMMENT '生产年份（货号位3-4）：24/25/26，决定基准折扣',
     sale_attr    VARCHAR(10) COMMENT '特卖属性：断码清仓/过季商品/特卖专供款/正价转特卖',
     list_price   DECIMAL(8,2) COMMENT '吊牌价（元）'
+);
+
+CREATE TABLE dim_staff
+(
+    staff_id        VARCHAR(20) PRIMARY KEY COMMENT '工号（登录名）：角色前缀 M/K/S/T + 3 位序号',
+    name            VARCHAR(30) NOT NULL,
+    role_codes      VARCHAR(50) NOT NULL COMMENT '角色码多值逗号分隔（MANAGER/KEEPER/STAFF/TEMP），权限取并集',
+    credential_hash VARCHAR(128) NOT NULL COMMENT '凭据加盐哈希（sha256$salt$hash），严禁明文',
+    status          VARCHAR(10) NOT NULL COMMENT '启用/停用',
+    valid_from      DATE NULL COMMENT '账号生效日（临时工必填）',
+    valid_to        DATE NULL COMMENT '失效日；NULL=长期有效',
+    hire_date       DATE NULL,
+    leave_date      DATE NULL,
+    created_by      VARCHAR(20) NULL COMMENT '开通人工号（留痕）',
+    created_at      DATETIME NULL,
+    updated_at      DATETIME NULL
 );
 
 CREATE TABLE dim_sku
@@ -383,7 +437,9 @@ CREATE TABLE fact_inventory_flow
     sku_id    VARCHAR(20),
     quantity  INT COMMENT '正=入库 负=出库',
     date_id   INT,
-    operator  VARCHAR(20)
+    operator_id VARCHAR(10) NULL COMMENT '经办人工号（关联 dim_staff）；NULL=系统自动（POS出库）',
+    idempotency_key VARCHAR(80) COMMENT '幂等键：单据号:SKU:操作类型（D21 防重复记账）',
+    operator  VARCHAR(20) COMMENT '经办人姓名（展示用）'
 );
 
 CREATE TABLE dim_replenish_policy
@@ -400,12 +456,17 @@ CREATE TABLE dim_replenish_policy
 
 
 def write_dw_sql(spus: list[dict], skus: list[dict], dates: list[dict],
-                 sales: list[dict], snapshots: list[dict], flows: list[dict]) -> None:
+                 sales: list[dict], snapshots: list[dict], flows: list[dict],
+                 staff: list[dict]) -> None:
     """组装 8 表 DDL + 分批 INSERT，整体写入 docker/mysql/dw.sql（覆盖写，幂等）"""
     parts = [DDL]
     parts.append(_inserts("dim_product",
                           ["product_id", "product_name", "category_l1", "category_l2",
                            "gender", "series", "season", "prod_year", "sale_attr", "list_price"], spus))
+    parts.append(_inserts("dim_staff",
+                          ["staff_id", "name", "role_codes", "credential_hash", "status",
+                           "valid_from", "valid_to", "hire_date", "leave_date",
+                           "created_by", "created_at", "updated_at"], staff))
     parts.append(_inserts("dim_sku", ["sku_id", "product_id", "color", "barcode"], skus))
     parts.append(_inserts("dim_date",
                           ["date_id", "year", "quarter", "month", "day", "weekday",
@@ -448,6 +509,7 @@ def self_check(spus, skus, sales, orders, snapshots, flows) -> None:
     print("[自检] 吊牌额:", round(tagged), "实收:", round(gmv),
           "整体折扣率:", round(gmv / tagged, 3))
     print("[自检] 满件订单(>=4件):", full, "触及10折封顶行:", capped)
+    print("[自检] 员工:", len(build_staff()), "（12在职+2异常演示账号）")
     print("[自检] 快照:", len(snapshots), "库存负值:", neg,
           "流水:", len(flows), "行")
 
@@ -474,5 +536,5 @@ if __name__ == "__main__":
                            "is_member": 1 if _o["is_member"] else 0,
                            "member_level": _o["level"]})
     _snaps, _flows = build_inventory(_skus, _sales, _spus_by_id)
-    write_dw_sql(_spus, _skus, build_dim_date(), _sales, _snaps, _flows)
+    write_dw_sql(_spus, _skus, build_dim_date(), _sales, _snaps, _flows, build_staff())
     self_check(_spus, _skus, _sales, _flat, _snaps, _flows)

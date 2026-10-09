@@ -34,6 +34,22 @@ CREATE TABLE dim_product
     list_price   DECIMAL(8,2) COMMENT '吊牌价（元）'
 );
 
+CREATE TABLE dim_staff
+(
+    staff_id        VARCHAR(20) PRIMARY KEY COMMENT '工号（登录名）：角色前缀 M/K/S/T + 3 位序号',
+    name            VARCHAR(30) NOT NULL,
+    role_codes      VARCHAR(50) NOT NULL COMMENT '角色码多值逗号分隔（MANAGER/KEEPER/STAFF/TEMP），权限取并集',
+    credential_hash VARCHAR(128) NOT NULL COMMENT '凭据加盐哈希（sha256$salt$hash），严禁明文',
+    status          VARCHAR(10) NOT NULL COMMENT '启用/停用',
+    valid_from      DATE NULL COMMENT '账号生效日（临时工必填）',
+    valid_to        DATE NULL COMMENT '失效日；NULL=长期有效',
+    hire_date       DATE NULL,
+    leave_date      DATE NULL,
+    created_by      VARCHAR(20) NULL COMMENT '开通人工号（留痕）',
+    created_at      DATETIME NULL,
+    updated_at      DATETIME NULL
+);
+
 CREATE TABLE dim_sku
 (
     sku_id     VARCHAR(20) PRIMARY KEY COMMENT 'SKU编码：货号-色号-尺码',
@@ -100,7 +116,9 @@ CREATE TABLE fact_inventory_flow
     sku_id    VARCHAR(20),
     quantity  INT COMMENT '正=入库 负=出库',
     date_id   INT,
-    operator  VARCHAR(20)
+    operator_id VARCHAR(10) NULL COMMENT '经办人工号（关联 dim_staff）；NULL=系统自动（POS出库）',
+    idempotency_key VARCHAR(80) COMMENT '幂等键：单据号:SKU:操作类型（D21 防重复记账）',
+    operator  VARCHAR(20) COMMENT '经办人姓名（展示用）'
 );
 
 CREATE TABLE dim_replenish_policy
@@ -236,6 +254,22 @@ INSERT INTO dim_product (product_id, product_name, category_l1, category_l2, gen
 ('10251010', '安踏运动系列男女同款可调护腕', '配件类', '运动护具', '男女同款', '综训', '春', '25', '断码清仓', 49),
 ('10244032', '安踏运动系列男女同款运动护踝', '配件类', '运动护具', '男女同款', '综训', '冬', '24', '断码清仓', 59),
 ('10253034', '安踏运动系列男女同款运动发带', '配件类', '运动护具', '男女同款', '生活', '秋', '25', '断码清仓', 39);
+
+INSERT INTO dim_staff (staff_id, name, role_codes, credential_hash, status, valid_from, valid_to, hire_date, leave_date, created_by, created_at, updated_at) VALUES
+('M001', '王志远', 'MANAGER', 'sha256$302b832debd12ee8$0312f4fe1dcbcd786ee601997038d76d4e74130d7472e621adcbdbe4b06257d7', '启用', '2024-03-01', NULL, '2024-03-01', NULL, 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00'),
+('K001', '李慧', 'STAFF,KEEPER', 'sha256$72277d66750a7b9c$3ab7150460773b3e30a38f2f415a0d28e814a4a585abd467f2e2d2f41161694e', '启用', '2024-05-15', NULL, '2024-05-15', NULL, 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00'),
+('S001', '陈明', 'STAFF', 'sha256$2575bde774bd0244$d78cc5b4b2de616a8a0c700f6145cbedb1694b3e4b01c7a924c4d49d969ff017', '启用', '2025-03-10', NULL, '2025-03-10', NULL, 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00'),
+('S002', '赵雪', 'STAFF', 'sha256$14951135d938ecbf$263af29610f3a2ea11fc059ea354b1d583a84795d04cfa0c5408634d7de3c602', '启用', '2025-03-10', NULL, '2025-03-10', NULL, 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00'),
+('S003', '刘洋', 'STAFF', 'sha256$8965086a5eecdf3f$737574762423d8acb085eddf51c62d23ee39a39a0ed8e314bcdd5d477302aadb', '启用', '2025-08-01', NULL, '2025-08-01', NULL, 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00'),
+('S004', '孙倩', 'STAFF', 'sha256$b1229bf528d5f8a4$373a57bdc12a2516dea03c619fb299a92bf32c96082f4dbb641ce209c4362cdc', '启用', '2025-08-01', NULL, '2025-08-01', NULL, 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00'),
+('S005', '郑凯', 'STAFF', 'sha256$8e73d9a44e1e3670$e12539ccaf4177c9bc8db38c4008dc4eea803203f80f324d26afeab830b2cfe0', '启用', '2026-01-05', NULL, '2026-01-05', NULL, 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00'),
+('S006', '马琳', 'STAFF', 'sha256$d2642d60f5e1258d$b1d6a841de9c6fa65caa0aa53c6a5741d59fa1ee1aaf5d9ead9ff4b1c18188a1', '启用', '2026-01-05', NULL, '2026-01-05', NULL, 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00'),
+('T001', '周小雨', 'TEMP', 'sha256$8458c91a46a34a2c$084820d595bf23751a7d134f46cb8e3c602b5829c7d88ccac4e15e9bf6f5b319', '启用', '2026-09-28', '2026-10-12', '2026-09-28', NULL, 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00'),
+('T002', '吴强', 'TEMP', 'sha256$808ba6b5277edd42$b075566e0122b9122d54f7be3bc28da719627277f18c09a61800c23b497ed0ae', '启用', '2026-09-28', '2026-10-12', '2026-09-28', NULL, 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00'),
+('T003', '何静', 'TEMP', 'sha256$0d9caac675803021$42d531d72c3b1e98bd749ec36daf93064e0c67ca7c4230aa1e1f12d07d402498', '启用', '2026-09-28', '2026-10-12', '2026-09-28', NULL, 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00'),
+('T004', '林浩', 'TEMP', 'sha256$63c55510dcc717bd$447557afded9c785a83d19521a49579ef53676c5f85c782eac2d0b2eae1d7e43', '启用', '2026-09-28', '2026-10-12', '2026-09-28', NULL, 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00'),
+('S007', '高翔', 'STAFF', 'sha256$ae9ca5ad4f38b526$c38be384af528249db21b1aac06e7a019a51e20f4a9d0b2eb23621293d497409', '停用', '2025-02-10', NULL, '2025-02-10', '2026-09-15', 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00'),
+('T005', '徐婷', 'TEMP', 'sha256$54e05f79b62dc345$08ac0ef94d302a6a36cdac02993de899b1b2c03dd9639cf05e10301835ed2450', '启用', '2026-08-01', '2026-08-31', '2026-08-01', NULL, 'M001', '2026-09-28 09:00:00', '2026-09-28 09:00:00');
 
 INSERT INTO dim_sku (sku_id, product_id, color, barcode) VALUES
 ('15241012-01-39', '15241012', '晨曦红/安踏白', '6982332736494'),
