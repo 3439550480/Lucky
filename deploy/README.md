@@ -115,3 +115,12 @@ EOF
 
 - 行为回滚：security 开关改 false → 重启（= v1.0 行为）
 - 部署回滚：`git checkout <上一 tag>` + `sudo systemctl restart lucky-backend` + Caddy 不动
+
+## 附：服务器 SSL 备忘（原 certificates.env，2026-10-09 并入）
+
+服务器若遇 SSL 证书链问题，在 `.env` 中追加：
+
+```
+SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+```
