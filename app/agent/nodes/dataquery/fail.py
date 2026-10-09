@@ -1,7 +1,7 @@
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
-from app.agent.nodes.error_messages import build_fail_reply
+from app.agent.nodes.common.error_messages import build_fail_reply
 from app.agent.state import DataAgentState
 from app.core.log import logger
 

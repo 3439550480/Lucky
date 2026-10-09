@@ -8,7 +8,7 @@ SQL 执行节点
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
-from app.agent.nodes.error_messages import humanize_exec_error
+from app.agent.nodes.common.error_messages import humanize_exec_error
 from app.agent.state import DataAgentState
 from app.core.log import logger
 

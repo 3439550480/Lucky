@@ -1,6 +1,5 @@
-"""
-掌柜问数 Agent 节点包
+"""安踏特卖店问数 Agent 节点包（2.0）。
 
-每个节点对应 LangGraph 图中的一个处理步骤
-节点之间通过 DataAgentState 传递中间状态，通过 Runtime 读取上下文和写出流式进度
+分层：dataquery（14 节点问数子图）/ inventory / replenish / default / common。
+节点通过绝对路径导入，注册表见 graph.py。
 """
