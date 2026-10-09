@@ -27,6 +27,15 @@ from app.core.log import logger
 from app.prompt.prompt_loader import load_prompt
 
 
+# 能力 -> 工具序列映射（03 tool_metrics 数据源；新增能力在此登记，
+# v1.1 由 "dataquery 硬编码" 泛化——inventory/replenish 等新能力不再被记为漏调）
+_TOOL_MAP = {
+    "dataquery": ["dataquery.search"],
+    "inventory": ["inventory.query"],
+    "replenish": ["replenish.plan"],
+}
+
+
 def _finish(writer, registry: CapabilityRegistry, holder,
             capability: str, source: str) -> dict:
     """五级通道的统一出口：
@@ -34,7 +43,7 @@ def _finish(writer, registry: CapabilityRegistry, holder,
     step 2: 组装 state 增量 —— tool_calls 按 v1 规则：dataquery → ["dataquery.search"]
     step 3: 发 success 事件并返回增量"""
     holder.value = capability
-    tool_calls = ["dataquery.search"] if capability == "dataquery" else []
+    tool_calls = _TOOL_MAP.get(capability, [])
     writer({"type": "progress", "step": "理解用户意图", "status": "success"})
     logger.info(f"路由完成: {capability} (source={source})")
     return {"capability": capability, "intent": capability,

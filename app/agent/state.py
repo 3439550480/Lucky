@@ -1,5 +1,5 @@
 """
-电商问数 Agent 状态定义
+安踏特卖店问数 Agent 状态定义（2.0）
 
 State 是 LangGraph 各节点之间传递和更新的共享数据
 本章在用户原始问题之外，新增关键词列表和三路召回结果
@@ -89,4 +89,8 @@ class DataAgentState(TypedDict):
     requested_capability: str  # 前端芯片显式选择（tier-0 输入；空串 = 自动路由）
     capability: str            # 路由选中的能力名（v1: dataquery|default）
     capability_source: str     # 路由来源 user/rules/embedding/llm/fallback（03 评估过滤用）
-    tool_calls: list[str]      # v1 由路由写入（03 tool_metrics 数据源；skill 化后为真实调用序列）
+    tool_calls: list[str]      # v1 由路由写入（03 tool_metrics 数据源；映射见 router._TOOL_MAP）
+
+    # ==== 2.0 新能力字段（inventory / replenish）====
+    inventory_rows: list[dict]  # 库存查询结果（inventory_query 节点写入；SQL 行透传）
+    replenish_plan: list[dict]  # 补货建议（replenish_plan 节点写入：固化算法输出 + 参数来源）
