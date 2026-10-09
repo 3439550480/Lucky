@@ -17,12 +17,12 @@ import { useSessions } from "./lib/useSessions";
 import { useTheme } from "./lib/theme";
 import type { AgentEvent, CapabilityInfo, ChatMessage, ModelInfo, StepState } from "./types/agent";
 
-// 示例问句（多样化：问数 / 闲聊 / 帮助——对应能力路由的三类分发）
+// 示例问句（安踏特卖店：问数 / 库存 / 补货 / 闲聊——对应能力路由的分发面）
 const examples = [
-  "统计 2025 年第一季度各大区的 GMV，并按 GMV 从高到低排序",
-  "华东地区卖得最好的 5 个商品是哪些？",
+  "国庆 7 天哪双鞋卖得最好？卖了多少金额？",
+  "现在还有多少库存？哪些 SKU 断码了？",
+  "生成鞋类的补货计划",
   "你好，你能做什么？",
-  "帮我看看各会员等级的消费情况",
 ];
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "Vite /api proxy";
@@ -162,6 +162,15 @@ export default function App() {
                 ...message,
                 status: "done",
                 explanation: event.text,
+              };
+            case "replenish":
+              // [2.0 S3b] 补货计划：结构化明细入 message，status 等 explanation 事件置 done
+              return {
+                ...message,
+                replenish: event.plan,
+                content: event.total_gap > 0
+                  ? `已生成补货计划：${event.scope.length > 0 ? event.scope.join("、") + " " : ""}共 ${event.total_gap} 个缺口 SKU，合计建议补货 ${event.total_suggest_qty} 件`
+                  : "当前库存满足覆盖目标，暂无补货缺口。",
               };
             default:
               return {

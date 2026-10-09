@@ -80,6 +80,9 @@ class FeatureFlags:
     rules_fast_path: bool = True      # 规则快速通道 开
     embedding_route: bool = True      # 向量路由     开
     capability_chip: bool = True      # 能力芯片     开
+    # [2.0 S3b] 新能力开关：关 = 路由层视该能力不存在（tier1/2/3 全跳过），恢复 dataquery+default 双能力行为
+    capability_inventory: bool = True   # 库存问数    开
+    capability_replenish: bool = True   # 补货计划    开
     context_management: bool = True   # 上下文管理   开
     memory: MemoryFlags = field(default_factory=MemoryFlags)  # 记忆模块（子开关箱）
     evaluation: EvaluationFlags = field(default_factory=EvaluationFlags)  # 评估模块（子开关箱）

@@ -36,6 +36,20 @@ _TOOL_MAP = {
 }
 
 
+def _disabled_capabilities() -> set[str]:
+    """按 Feature Flags 计算本轮被禁用的能力（2.0 S3b 门控）。
+    禁用语义 = 路由层视该能力不存在：tier1/2 匹配时跳过（不占用命中），
+    tier3 分类结果不接标 —— 关闭 capability_inventory/capability_replenish
+    即恢复 v1.1 的 dataquery+default 双能力行为（关 = 旧行为纪律）"""
+    flags = app_config.features
+    disabled: set[str] = set()
+    if not flags.capability_inventory:
+        disabled.add("inventory")
+    if not flags.capability_replenish:
+        disabled.add("replenish")
+    return disabled
+
+
 def _finish(writer, registry: CapabilityRegistry, holder,
             capability: str, source: str) -> dict:
     """五级通道的统一出口：
@@ -63,18 +77,20 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
         logger.info("能力路由已关闭，直通 dataquery（旧路径）")
         return _finish(writer, registry, holder, "dataquery", "fallback")
 
-    # ---- tier 0: 用户芯片显式选择（selectable=true 才合法，非法值忽略）----
+    disabled = _disabled_capabilities()
+
+    # ---- tier 0: 用户芯片显式选择（selectable=true 且未禁用才合法，非法值忽略）----
     requested = state.get("requested_capability", "")
     if app_config.features.capability_chip and requested:
         cap = registry.capabilities.get(requested)
-        if cap and cap.selectable:
+        if cap and cap.selectable and cap.name not in disabled:
             logger.info(f"路由(tier0-user): {requested}")
             return _finish(writer, registry, holder, requested, "user")
-        logger.warning(f"请求的 capability '{requested}' 不可选，忽略并走自动路由")
+        logger.warning(f"请求的 capability '{requested}' 不可选/已禁用，忽略并走自动路由")
 
     # ---- tier 1: 规则快路径（高确定性正则，命中 0 token）----
     if app_config.features.rules_fast_path:
-        hit = registry.match_rules(query)
+        hit = registry.match_rules(query, skip=disabled)
         if hit:
             logger.info(f"路由(tier1-rules): {hit}")
             return _finish(writer, registry, holder, hit, "rules")
@@ -85,7 +101,7 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
             embedding_client = runtime.context["embedding_client"]
             await registry.ensure_vectors(embedding_client)
             query_vector = await embedding_client.aembed_query(query)
-            hit = await registry.match_embedding(query_vector)
+            hit = await registry.match_embedding(query_vector, skip=disabled)
             if hit:
                 logger.info(f"路由(tier2-embedding): {hit[0]} score={hit[1]:.3f}")
                 return _finish(writer, registry, holder, hit[0], "embedding")
@@ -129,6 +145,10 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
             }
         result = await chain.ainvoke(chain_input)
         cap = (result or {}).get("capability", "")
+        if cap in disabled:
+            # 分类为被禁用能力 → 不接标，落 default（与"不在注册表"同待遇）
+            logger.info(f"LLM 分类结果 '{cap}' 已被 Feature Flags 禁用，兜底 default")
+            return _finish(writer, registry, holder, registry.default_capability, "fallback")
         if cap in registry.capabilities:
             logger.info(f"路由(tier3-llm): {cap}")
             return _finish(writer, registry, holder, cap, "llm")

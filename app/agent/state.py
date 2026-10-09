@@ -91,6 +91,7 @@ class DataAgentState(TypedDict):
     capability_source: str     # 路由来源 user/rules/embedding/llm/fallback（03 评估过滤用）
     tool_calls: list[str]      # v1 由路由写入（03 tool_metrics 数据源；映射见 router._TOOL_MAP）
 
-    # ==== 2.0 新能力字段（inventory / replenish）====
-    inventory_rows: list[dict]  # 库存查询结果（inventory_query 节点写入；SQL 行透传）
+    # ==== 2.0 新能力字段（replenish）====
+    # [规则3 留档] S3b 设计拍板：inventory 复用问数链路（结果走 result 字段，不设
+    # inventory_rows——原预留字段删除）；replenish 是固化算法单节点，结构化建议写这里
     replenish_plan: list[dict]  # 补货建议（replenish_plan 节点写入：固化算法输出 + 参数来源）

@@ -50,10 +50,14 @@ class CapabilityRegistry:
         return [self.capabilities[name] for name in self._order
                 if self.capabilities[name].selectable]
 
-    def match_rules(self, query: str) -> Optional[str]:
+    def match_rules(self, query: str, skip: Optional[set[str]] = None) -> Optional[str]:
         """规则快路径：按配置顺序逐能力尝试 rules，第一个命中的能力名；无命中 None。
+        skip：被 Feature Flags 禁用的能力名集合（2.0 S3b）——跳过如同不存在，
+        继续尝试后续能力的规则，而不是命中后丢弃。
         高确定性规则前置是省 token 的关键 —— 命中即分发，0 token 进入链路"""
         for name in self._order:
+            if skip and name in skip:
+                continue
             for pattern in self.capabilities[name].rules:
                 if pattern.search(query):
                     return name
@@ -88,8 +92,10 @@ class CapabilityRegistry:
         for name, start, end in spans:
             self.capabilities[name].example_vectors = vectors[start:end]
 
-    async def match_embedding(self, query_vector: list[float]) -> Optional[tuple[str, float]]:
+    async def match_embedding(self, query_vector: list[float],
+                              skip: Optional[set[str]] = None) -> Optional[tuple[str, float]]:
         """查询向量与各能力语料做余弦相似度，返回 (能力名, 最高分)；无超阈值命中 None。
+        skip：被 Feature Flags 禁用的能力名集合（同 match_rules，跳过即视为不存在）。
         评测与调优依赖：命中的阈值就是 routing.embedding_threshold（0.85 起步）"""
         # step 1: 语料未就绪 → 返回 None（上层会落入 LLM 通道，绝不阻塞路由）
         if not all(cap.example_vectors for cap in self.capabilities.values()):
@@ -98,6 +104,8 @@ class CapabilityRegistry:
         # 不引入 numpy 依赖；纯 Python 实现 = 算法可读，这正是教学项目要的
         best_name, best_score = None, 0.0
         for name in self._order:
+            if skip and name in skip:
+                continue
             cap = self.capabilities[name]
             for vec in cap.example_vectors or []:
                 score = self._cosine(query_vector, vec)

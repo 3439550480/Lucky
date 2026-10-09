@@ -13,6 +13,40 @@ capabilities:
     rules:                            # 规则快路径：只放"高度确定"表述，模糊词交由 embedding/LLM 层
       - "数据查询|查询数据|查一下数据"
       - "(帮我|给我)?(统计|查询|查一下).{0,12}(GMV|销售额|订单量|复购率|客单价|转化率|销量)"
+  - name: inventory                   # [2.0 S3b] 库存问数：复用问数链路（entry 与 dataquery 同为
+                                      # extract_keywords，领域知识在 meta_config.yaml 库存表语义中；
+                                      # Feature Flag：features.capability_inventory）
+    description: 库存查询：当前可用库存、断码SKU、出入库流水、动销率、库存覆盖天数等只读查询
+    examples:                         # tier2 向量化语料 + tier3 分类示例
+      - "现在还有多少库存"
+      - "哪些SKU断码了"
+      - "查一下货号15262019的库存"
+      - "昨天的销售出库有多少件"
+      - "国庆期间动销率多少"
+      - "报损了多少"
+    entry: extract_keywords           # 与 dataquery 共享入口（19 节点链路零复制）
+    selectable: true
+    rules:
+      - "(有多少|查一下|看看|查询).{0,12}(库存|存货|货量|剩多少)"
+      - "断码|断货|缺货|库存充足"
+      - "出入库|入库|出库|流水|报损|动销率|覆盖天数"
+  - name: replenish                   # [2.0 S3b] 补货计划：固化算法单节点（非 prompt+子图——
+                                      # 补货是业务数学题，LLM 只做解释不碰数字）
+    description: 补货计划：按品类补货策略（覆盖天数+安全库存）生成建议补货量，按断货紧急度排序
+    examples:
+      - "生成补货计划"
+      - "哪些商品需要补货"
+      - "鞋类补货建议"
+      - "今天要补哪些货"
+    entry: replenish_plan
+    selectable: true
+    rules:
+      - "补货(计划|建议|方案|清单|单)"
+      - "(生成|做|出).{0,4}(补货|要货)"
+      - "^要货"
+  # [预留] warehouse_replenish（仓库补货，方案 D15）：dim_replenish_policy.scope=warehouse
+  # 参数行已预埋；启用 = 节点参数化（scope 参数）+ 此处加条目（entry 指向参数化后的节点）。
+  # 现在注册会因 entry 无对应节点在启动时 fail-fast，故仅留注释不入表。
   - name: default                     # 默认通用对话（兜底）
     description: 通用助手对话：闲聊、使用帮助、回顾上次结果、无法归类问题的兜底
     examples:

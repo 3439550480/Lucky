@@ -63,6 +63,12 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
             </div>
           )}
           {!isUser && message.result !== undefined && <ResultTable data={message.result} />}
+          {!isUser && message.replenish && (
+            <div className="mt-3">
+              <p className="mb-1 text-xs font-semibold text-muted">补货建议（按断货紧急度排序）</p>
+              <ResultTable data={message.replenish} />
+            </div>
+          )}
 
           <div
             className={cn(

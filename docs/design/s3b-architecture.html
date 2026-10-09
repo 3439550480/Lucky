@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lucky 2.0 · S3b 能力架构方案</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f5f5f5;
+    --paper-2: #ececec;
+    --ink: #2d3142;
+    --muted: #4f5d75;
+    --soft: #7a8399;
+    --rule: rgba(45,49,66,0.12);
+    --accent: #eb6c36;
+    --accent-tint: rgba(235,108,54,0.08);
+    --link: #2e5aa8;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Geist', 'Noto Sans SC', sans-serif;
+    padding: 3rem 2rem 2.5rem;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  .eyebrow {
+    font-family: 'Geist Mono', 'Noto Sans SC', monospace;
+    font-size: 0.6875rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--soft);
+    margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-family: 'Instrument Serif', 'Noto Serif SC', serif;
+    font-weight: 400;
+    font-size: 1.75rem;
+    letter-spacing: 0.01em;
+    margin-bottom: 0.5rem;
+  }
+  .subtitle {
+    font-size: 0.875rem;
+    color: var(--muted);
+    margin-bottom: 2rem;
+  }
+  .diagram { overflow-x: auto; }
+  .aside {
+    font-family: 'Instrument Serif', 'Noto Serif SC', serif;
+    font-style: italic;
+    font-size: 0.875rem;
+    color: var(--muted);
+    max-width: 46rem;
+    margin-top: 1.25rem;
+    padding-left: 0.875rem;
+    border-left: 2px solid var(--rule);
+  }
+  .aside + .aside { margin-top: 0.875rem; }
+  .colophon {
+    font-family: 'Geist Mono', 'Noto Sans SC', monospace;
+    font-size: 0.6875rem;
+    color: var(--soft);
+    border-top: 1px solid var(--rule);
+    margin-top: 2.25rem;
+    padding-top: 0.875rem;
+    letter-spacing: 0.08em;
+  }
+</style>
+</head>
+<body>
+
+<p class="eyebrow">Architecture · Capability Routing · S3b</p>
+<h1>Lucky 2.0 — 能力路由与三种能力形状</h1>
+<p class="subtitle">一次提问经五级路由分发到三种执行形状；珊瑚色即本轮两个设计拍板：inventory 复用链路，replenish 固化算法。</p>
+
+<div class="diagram">
+<svg viewBox="0 0 1200 800" role="img" aria-labelledby="s3b-arch-title s3b-arch-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="s3b-arch-title">Lucky 2.0 能力路由架构：三种能力形状</title>
+  <desc id="s3b-arch-desc">Lucky 2.0 架构图：用户问题经五级能力路由分发到三种执行形状——dataquery 与 inventory 共用 19 节点问数链路，replenish 为固化算法单节点，default 为兜底对话；各能力经 SSE 事件流送达前端渲染。</desc>
+
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+    </marker>
+    <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/>
+    </marker>
+    <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+    </marker>
+  </defs>
+
+  <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+  <!-- ================= 箭头（先画线，后画框） ================= -->
+
+  <!-- A1 用户 → 路由 -->
+  <path d="M184,348 H264" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- A2 路由 → 问数链路（共用入口，orthogonal 上折） -->
+  <path d="M440,322 H480 A8,8 0 0 0 488,314 V176 A8,8 0 0 1 496,168 H560"
+        fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- A3 路由 → 补货计划（水平直连） -->
+  <path d="M440,348 H560" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- A4 路由 → 兜底（orthogonal 下折） -->
+  <path d="M440,374 H492 A8,8 0 0 1 500,382 V540 A8,8 0 0 0 508,548 H560"
+        fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- A5 问数链路 → SSE（orthogonal 下折） -->
+  <path d="M928,168 H960 A8,8 0 0 1 968,176 V310 A8,8 0 0 0 976,318 H1024"
+        fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- A6 补货计划 → SSE（水平直连） -->
+  <path d="M928,372 H1024" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- A7 兜底 → SSE（orthogonal 绕行前端节点下方） -->
+  <path d="M928,528 H980 A8,8 0 0 1 988,536 V446 A8,8 0 0 1 996,438 H1064 A8,8 0 0 0 1072,430 V408"
+        fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- A8 SSE → 前端 -->
+  <path d="M1120,408 V480" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- ================= 节点 ================= -->
+
+  <!-- 用户问题（输入） -->
+  <rect x="40" y="312" width="144" height="72" rx="6" fill="#f5f5f5"/>
+  <rect x="40" y="312" width="144" height="72" rx="6" fill="rgba(79,93,117,0.10)" stroke="#7a8399" stroke-width="1"/>
+  <rect x="48" y="318" width="40" height="12" rx="2" fill="transparent" stroke="rgba(122,131,153,0.40)" stroke-width="0.8"/>
+  <text x="68" y="327" fill="rgba(122,131,153,0.85)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">INPUT</text>
+  <text x="112" y="354" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">用户问题</text>
+  <text x="112" y="372" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">自然语言提问</text>
+
+  <!-- 能力路由（处理节点） -->
+  <rect x="264" y="296" width="176" height="104" rx="6" fill="#f5f5f5"/>
+  <rect x="264" y="296" width="176" height="104" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="272" y="302" width="52" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+  <text x="298" y="311" fill="rgba(45,49,66,0.80)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ROUTER</text>
+  <text x="352" y="338" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">能力路由 · 五级递进</text>
+  <text x="352" y="357" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">route_capability</text>
+  <text x="352" y="382" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">芯片→规则→向量→LLM</text>
+
+  <!-- 问数链路（焦点 1：共用容器） -->
+  <rect x="560" y="88" width="368" height="160" rx="6" fill="#f5f5f5"/>
+  <rect x="560" y="88" width="368" height="160" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+  <rect x="568" y="94" width="124" height="12" rx="2" fill="transparent" stroke="rgba(235,108,54,0.40)" stroke-width="0.8"/>
+  <text x="630" y="103" fill="rgba(235,108,54,0.85)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SUBGRAPH · SHARED</text>
+  <text x="744" y="128" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">问数链路（19 节点）</text>
+  <text x="744" y="150" fill="#2d3142" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">dataquery + inventory 共用 entry：extract_keywords</text>
+  <text x="744" y="172" fill="#2d3142" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">召回 → 生成 SQL → 校验修正 → 执行 → 解释</text>
+  <text x="744" y="194" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">零新增节点 · 领域知识在 meta_config + prompt</text>
+  <text x="744" y="216" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">inventory = config-driven, 0 new node</text>
+
+  <!-- 补货计划（焦点 2：单节点流水） -->
+  <rect x="560" y="312" width="368" height="120" rx="6" fill="#f5f5f5"/>
+  <rect x="560" y="312" width="368" height="120" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+  <rect x="568" y="318" width="96" height="12" rx="2" fill="transparent" stroke="rgba(235,108,54,0.40)" stroke-width="0.8"/>
+  <text x="616" y="327" fill="rgba(235,108,54,0.85)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE · SINGLE</text>
+  <text x="744" y="352" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">补货计划 replenish_plan</text>
+  <text x="744" y="376" fill="#2d3142" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">固定 SQL 取数 → 固化算法 → LLM 只解释</text>
+  <text x="744" y="398" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">max(0, ceil(daily x (cov+safety)) - avail - transit)</text>
+
+  <!-- 兜底对话（处理节点） -->
+  <rect x="560" y="512" width="368" height="72" rx="6" fill="#f5f5f5"/>
+  <rect x="560" y="512" width="368" height="72" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="568" y="518" width="40" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+  <text x="588" y="527" fill="rgba(45,49,66,0.80)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+  <text x="744" y="548" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">兜底对话 default_answer</text>
+  <text x="744" y="568" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">闲聊 · 使用帮助 · 引导回问数</text>
+
+  <!-- SSE 事件流（处理节点） -->
+  <rect x="1024" y="288" width="144" height="120" rx="6" fill="#f5f5f5"/>
+  <rect x="1024" y="288" width="144" height="120" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+  <rect x="1032" y="294" width="52" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+  <text x="1058" y="303" fill="rgba(45,49,66,0.80)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">STREAM</text>
+  <text x="1096" y="330" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">SSE 事件流</text>
+  <text x="1096" y="354" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">progress · result</text>
+  <text x="1096" y="372" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">explanation · replenish</text>
+  <text x="1096" y="394" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">通用透传，零改动</text>
+
+  <!-- 前端渲染（外部系统） -->
+  <rect x="1024" y="480" width="144" height="88" rx="6" fill="#f5f5f5"/>
+  <rect x="1024" y="480" width="144" height="88" rx="6" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+  <rect x="1032" y="486" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+  <text x="1044" y="495" fill="rgba(45,49,66,0.70)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+  <text x="1096" y="520" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">前端渲染</text>
+  <text x="1096" y="542" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">查询表格 · 补货表格</text>
+  <text x="1096" y="560" fill="#7a8399" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif" text-anchor="middle">Markdown · 步骤条</text>
+
+  <!-- ================= 图例（底部横条） ================= -->
+  <line x1="40" y1="744" x2="1160" y2="744" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+  <text x="40" y="768" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
+
+  <rect x="120" y="756" width="16" height="12" rx="2" fill="rgba(79,93,117,0.10)" stroke="#7a8399" stroke-width="0.8"/>
+  <text x="144" y="766" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif">输入</text>
+
+  <rect x="220" y="756" width="16" height="12" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="0.8"/>
+  <text x="244" y="766" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif">处理节点</text>
+
+  <rect x="348" y="756" width="16" height="12" rx="2" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="0.8"/>
+  <text x="372" y="766" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif">设计焦点（本轮拍板）</text>
+
+  <rect x="560" y="756" width="16" height="12" rx="2" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+  <text x="584" y="766" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif">外部系统</text>
+
+  <line x1="700" y1="762" x2="732" y2="762" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+  <text x="744" y="766" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans SC',sans-serif">同步执行流</text>
+</svg>
+</div>
+
+<p class="aside">两个焦点即两个拍板：inventory 复用 19 节点链路（entry 共用 extract_keywords，库存语义全部沉淀在 meta_config 与提示词层）；replenish 恰好反其道而行——补货是业务数学题，数字由固化算法算出，LLM 只负责讲人话。</p>
+<p class="aside">Feature Flags 门控：capability_inventory / capability_replenish 任一关闭，路由层即视该能力不存在（tier1/2/3 全跳过），恢复 v1.1 的 dataquery + default 双能力行为。</p>
+
+<p class="colophon">lucky2 · conf/capability_config.yaml · app/agent/graph.py · app/agent/nodes/replenish/replenish_plan.py · 2026-10-09</p>
+
+</body>
+</html>

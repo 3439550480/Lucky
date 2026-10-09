@@ -51,7 +51,36 @@ export type ExplanationEvent = {
   capability?: string;   // [NEW]
 };
 
-export type AgentEvent = ProgressEvent | ResultEvent | ErrorEvent | ExplanationEvent;
+// [2.0 S3b] 补货计划事件：replenish 能力的结构化建议（LLM 解释仍走 explanation 事件）
+export type ReplenishRow = {
+  sku_id: string;
+  product_name: string;
+  category_l1: string;
+  avg_daily_sales: number;
+  coverage_days: number;
+  safety_days: number;
+  available_qty: number;
+  on_transit: number;
+  target_qty: number;
+  suggest_qty: number;
+  days_left: number | null;
+};
+
+export type ReplenishEvent = {
+  type: "replenish";
+  plan: ReplenishRow[];
+  total_gap: number;         // 缺口 SKU 总数
+  total_suggest_qty: number; // 合计建议补货件数
+  scope: string[];           // 品类范围（空 = 全店）
+  capability?: string;
+};
+
+export type AgentEvent =
+  | ProgressEvent
+  | ResultEvent
+  | ErrorEvent
+  | ExplanationEvent
+  | ReplenishEvent;
 
 
 export type StepState = {
@@ -68,6 +97,7 @@ export type ChatMessage = {
   status?: "streaming" | "done" | "error";
   steps?: StepState[];
   result?: unknown;
+  replenish?: ReplenishRow[]; // [2.0 S3b] 补货计划明细（replenish 事件写入）
   explanation?: string;     // 助手消息的解释文本
   error?: string;
 };

@@ -76,6 +76,8 @@ features:                     # [NEW] 模块开关（定义见 docs/design/00 §
   rules_fast_path: true
   embedding_route: true
   capability_chip: true
+  capability_inventory: true    # [2.0 S3b] 库存问数（关=恢复 dataquery+default 双能力行为）
+  capability_replenish: true    # [2.0 S3b] 补货计划（同上）
   context_management: true
   memory:
     short_term: true

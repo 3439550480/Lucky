@@ -3,6 +3,9 @@
 
 链路：START → route_capability（五级递进路由，04 §3.2）→ 按能力 entry 分发：
   dataquery → 原问数 19 节点链路（内部逻辑未动，04 红线）
+  inventory → 同问数链路（[2.0 S3b] 复用：entry 共用 extract_keywords，零新增节点，
+              库存领域知识在 meta_config.yaml 表语义 + generate_sql.prompt 领域条款）
+  replenish → replenish_plan（[2.0 S3b] 固化补货算法单节点 + LLM 解释，非子图）
   default   → default_answer（通用对话，模型自由发挥）
 问数链路内：抽取关键词 → 三路召回并行 → 合并 → 表/指标过滤 → 补上下文
 → 生成 SQL → 校验 →（错误）修正循环（最多 max_retries 次）→ 执行 → 解释结果
@@ -31,6 +34,7 @@ from app.agent.nodes.dataquery.recall_metric import recall_metric
 from app.agent.nodes.dataquery.recall_value import recall_value
 from app.agent.nodes.dataquery.run_sql import run_sql
 from app.agent.nodes.dataquery.validate_sql import validate_sql
+from app.agent.nodes.replenish.replenish_plan import replenish_plan
 from app.agent.state import DataAgentState
 from app.clients.embedding_client_manager import embedding_client_manager
 from app.conf.app_config import app_config
@@ -64,9 +68,10 @@ graph_builder.add_node("run_sql", run_sql)
 graph_builder.add_node("explain_result", explain_result)
 graph_builder.add_node("fail", fail)
 
-# ---- 注册节点：能力路由 + default 能力（04 文档）----
+# ---- 注册节点：能力路由 + default + replenish（2.0 S3b）----
 graph_builder.add_node("route_capability", route_capability)
 graph_builder.add_node("default_answer", default_answer)
+graph_builder.add_node("replenish_plan", replenish_plan)   # 补货计划（固化算法单节点）
 
 # ---- 注册表 fail-fast 校验：能力 entry / routing 兜底必须指向已注册节点（04 §2.2）----
 registry.validate_entries(set(graph_builder.nodes))
@@ -90,8 +95,9 @@ graph_builder.add_conditional_edges(
     path_map=path_map,
 )
 
-# default 能力：回答即终点
+# default / replenish 能力：回答即终点
 graph_builder.add_edge("default_answer", END)
+graph_builder.add_edge("replenish_plan", END)
 
 # ---- 问数链路边（原样保留）----
 # 抽取关键词后，三路召回并行扇出
