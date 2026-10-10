@@ -1,7 +1,7 @@
 [project]
 name = "lucky"
 version = "1.0.0"
-description = "Lucky 智能助手：连锁奶茶店问数 Agent 工程范本（FastAPI + LangGraph）"
+description = "Lucky 智能助手：安踏特卖店问数 Agent 工程范本（FastAPI + LangGraph）"
 readme = "README.md"
 requires-python = ">=3.10"   # 改为 3.10 或更高，但不要写 3.14
 dependencies = [
