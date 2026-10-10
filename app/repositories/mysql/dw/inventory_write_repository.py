@@ -8,8 +8,6 @@
   - 联动：fact_inventory_flow 插入 + dim_inventory_snapshot 最新日快照可用/账面同步
   - 事务：同一 AsyncSession 上先写后 commit，失败整体回滚（调用方 finally 不 commit）
 """
-import datetime
-
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,10 +48,18 @@ class InventoryWriteRepository:
     async def commit_flow(self, *, direction: str, doc_no: str, sku_id: str,
                           qty: int, operator_id: str, operator_name: str) -> dict:
         """确认后的写库：flow 插入 + 快照联动，单事务提交。
-        返回 {flow_id, available_after}；幂等命中抛 FlowAlreadyProcessed"""
+        返回 {flow_id, available_after, date_id}；幂等命中抛 FlowAlreadyProcessed
+
+        [规则3 留档 + 实测缺陷修复 2026-10-10] 原版 date_id 取真实今天（20261010）——
+        但快照联动更新的是最新快照日（10-07），导致"快照含这笔 +20、按 10-07 查流水
+        却找不到"的口径分裂（用户实测抓出：70→100 对不上流水）。修复：写操作的
+        date_id 归入**最新快照日**（单店演示数据窗口固定的必然口径），流水与快照永远一致。
+        """
         flow_type = "补货入库-早班" if direction == "in" else "销售出库"
         sign = qty if direction == "in" else -qty
-        date_id = int(datetime.datetime.now().strftime("%Y%m%d"))
+        snap_date = await self.session.execute(
+            text("SELECT MAX(snapshot_date) FROM dim_inventory_snapshot"))
+        date_id = int(snap_date.scalar())
         idempotency_key = f"{doc_no}:{sku_id}:{'IN' if direction == 'in' else 'OUT'}"
 
         # 事务内幂等复查（预检与提交之间可能被并发写入——D21 防重复记账）
@@ -82,4 +88,5 @@ class InventoryWriteRepository:
         await self.session.commit()   # 单事务：flow 与快照同生共死
 
         available_after = await self.latest_available(sku_id)
-        return {"flow_id": flow_id, "flow_type": flow_type, "available_after": available_after}
+        return {"flow_id": flow_id, "flow_type": flow_type,
+                "available_after": available_after, "date_id": date_id}
