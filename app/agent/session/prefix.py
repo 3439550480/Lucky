@@ -8,7 +8,8 @@ KV cache 固定前缀构建器（05 文档 §3.4）
 from app.agent.capabilities.registry import registry
 from app.prompt.prompt_loader import load_prompt
 
-PREFIX_VERSION = "v1"          # 前缀协议版本——system_prompt.prompt 内容变更时必须递增
+PREFIX_VERSION = "v2"          # 前缀协议版本——system_prompt.prompt 内容变更时必须递增
+                               # [v2] S3 回填：安踏特卖店场景 + 三工具定义（v1 为旧电商场景，已废弃）
 
 
 def build_system_prefix() -> str:
