@@ -8,7 +8,7 @@ FastAPI 依赖组装
 
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -116,7 +116,7 @@ async def get_insights_repository(
     return InsightsRepository(session)
 
 
-async def get_current_staff(request) -> StaffIdentity:
+async def get_current_staff(request: Request) -> StaffIdentity:
     """鉴权依赖：Authorization: Bearer <token> → StaffIdentity。
     失效（不存在/绝对过期/闲置超时）统一 401 —— 前端据此跳登录页。
     登录后全端点受保护（热卖侧边栏亦然：登录即可见，不占权限点）"""
