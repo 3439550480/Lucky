@@ -1,0 +1,57 @@
+{
+  "dataset_id": "eval_anta_memory",
+  "version": "1.0",
+  "description": "安踏特卖店 Agent 记忆评测集（S4 记忆组，3 例）——需以 --features memory.long_term=true 运行，否则 runner 会把这 3 例判为 skipped（06 §5）。判定口径：setup_runs 逐条跑完并提取记忆 → fresh store 落盘校验 → 新 thread_id 跨会话 probe；expected_recall 用边界感知子串匹配（memory_metrics.value_in_text）命中答复文本。",
+  "defaults": {
+    "match_mode": "exact",
+    "k": 5
+  },
+  "cases": [
+    {
+      "id": "anta_mem_customer_profile",
+      "query": "我们店的主要客群是谁？",
+      "capability": "default",
+      "enabled": true,
+      "expected": {},
+      "golden_sql": null,
+      "memory_setup": {
+        "setup_runs": [
+          "我们店主要做年轻女性顾客的生意，女款卖得最好，进货要优先女款"
+        ],
+        "expected_recall": ["女性"]
+      },
+      "notes": "测『经营范围类记忆』：setup 只交代一次，probe 换成新会话的提问，检索命中才算想起"
+    },
+    {
+      "id": "anta_mem_loss_flow",
+      "query": "报损流程有什么要求？",
+      "capability": "default",
+      "enabled": true,
+      "expected": {},
+      "golden_sql": null,
+      "memory_setup": {
+        "setup_runs": [
+          "报损必须先拍照留证",
+          "报损还要由店长在系统里确认后才能提交"
+        ],
+        "expected_recall": ["拍照", "店长"]
+      },
+      "notes": "两轮 setup 讲同一条流程 → 检验多轮抽取是否合并成一条完整记忆（只想起一半则 recall 打折）"
+    },
+    {
+      "id": "anta_mem_replenish_rhythm",
+      "query": "我们店鞋类的补货节奏是怎么规定的？",
+      "capability": "default",
+      "enabled": true,
+      "expected": {},
+      "golden_sql": null,
+      "memory_setup": {
+        "setup_runs": [
+          "我们店的补货规矩：鞋类每周补一次，服装类每两周补一次"
+        ],
+        "expected_recall": ["每周"]
+      },
+      "notes": "测『业务规矩类记忆』：probe 问鞋类 → 命中的应是『每周』而非服装类的『每两周』（干扰项同句出现，检验检索精度）"
+    }
+  ]
+}

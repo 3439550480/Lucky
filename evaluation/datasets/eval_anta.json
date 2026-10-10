@@ -1,0 +1,465 @@
+{
+  "dataset_id": "eval_anta",
+  "version": "1.0",
+  "description": "安踏特卖店 Agent 评测集（S4）——30 例：折扣机制 4 / 销售与维度 11 / 库存 5 / 补货 2 / 多轮 4 / 兜底与边界 4。口径纪律：①凡日期相关一律显式写死『国庆档 20261001~20261007』，因库中已被 daily_append 追加 20261008~20261009（docs/演示题库.md 维护约定 4）；②『现在』类库存口径在 golden 里用 MAX(snapshot_date) 子查询表达，日切追加后左右同口径；③TopN 类（排序+LIMIT）不设 golden_sql，因 result_sample 只取前 20 行、且 agent 返回行数不可控，设了会误伤 SQL 正确性；④expected.columns 用 meta_config.yaml 的『表名.字段名』id，expected.metrics 用 8 大指标名，expected.values 只声明问句字面出现的维度取值（取值召回是关键词驱动，字面不出现的值不该要求召回）。",
+  "defaults": {
+    "match_mode": "exact",
+    "k": 5
+  },
+  "cases": [
+    {
+      "id": "anta_discount_overall",
+      "query": "国庆 7 天整体的平均折扣率是多少？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["平均折扣率"],
+        "columns": ["fact_sales.final_rate", "fact_sales.actual_amount", "fact_sales.list_price", "fact_sales.quantity"],
+        "values": []
+      },
+      "golden_sql": "SELECT ROUND(SUM(actual_amount) / SUM(list_price * quantity), 4) AS discount_rate FROM fact_sales WHERE date_id BETWEEN 20261001 AND 20261007",
+      "notes": "口径=实收/吊牌额（金额加权），实测 0.5164（实收 21,671,125.20 / 吊牌 41,962,146）。逐行再平均（AVG(final_rate)）不等于该值，是常见错解；题库 Q1 基线一致"
+    },
+    {
+      "id": "anta_fullqty_orders",
+      "query": "国庆期间有多少笔订单触发了满件折扣？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": [],
+        "columns": ["fact_sales.order_id", "fact_sales.order_total_qty", "fact_sales.date_id"],
+        "values": []
+      },
+      "golden_sql": "SELECT COUNT(DISTINCT order_id) AS full_qty_orders FROM fact_sales WHERE date_id BETWEEN 20261001 AND 20261007 AND order_total_qty >= 4",
+      "notes": "门槛 4 件来自 dim_pricing_rule(full_price_threshold.threshold_qty)；实测 9,452 单，题库 Q2 基线一致"
+    },
+    {
+      "id": "anta_caprate_top",
+      "query": "国庆期间哪些商品被 10 折封顶的次数最多？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["平均折扣率"],
+        "columns": ["fact_sales.final_rate", "fact_sales.sku_id", "fact_sales.date_id", "dim_product.product_name"],
+        "values": []
+      },
+      "golden_sql": null,
+      "notes": "封顶=final_rate 打到 cap_rate(1.00)。Top5（行数）：陨石4 休闲鞋 109 / 速干三代短袖针织衫 103 / 狂潮8 PRO 96 / 冠军5 94 / 狂潮8 92。不设 golden：排序+LIMIT 的返回行数不可控"
+    },
+    {
+      "id": "anta_base_rate_rules",
+      "query": "24 年、25 年、26 年的基准折扣率分别是多少？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["平均折扣率"],
+        "columns": ["dim_pricing_rule.rule_type", "dim_pricing_rule.year_code", "dim_pricing_rule.season_code", "dim_pricing_rule.base_rate"],
+        "values": ["24", "25", "26"]
+      },
+      "golden_sql": "SELECT year_code, season_code, base_rate FROM dim_pricing_rule WHERE rule_type = 'base_discount' ORDER BY year_code",
+      "notes": "4 行：24→0.20 / 25→0.35 / 26+夏→0.70 / 26 非夏→0.50。本条测的是『规则表直查』能力，不涉及 fact 表"
+    },
+    {
+      "id": "anta_sales_by_category",
+      "query": "国庆期间各一级品类的销售额分别是多少？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销售额"],
+        "columns": ["dim_product.category_l1", "fact_sales.actual_amount", "fact_sales.sku_id"],
+        "values": []
+      },
+      "golden_sql": "SELECT p.category_l1, ROUND(SUM(s.actual_amount), 2) AS amount FROM fact_sales s JOIN dim_sku k ON s.sku_id = k.sku_id JOIN dim_product p ON k.product_id = p.product_id WHERE s.date_id BETWEEN 20261001 AND 20261007 GROUP BY p.category_l1 ORDER BY amount DESC",
+      "notes": "鞋类 13,862,669.65 / 服装类 7,681,584.05 / 配件类 126,871.50（合计 21,671,125.20，与整体口径自洽）"
+    },
+    {
+      "id": "anta_daily_sales",
+      "query": "国庆 7 天每天的销售额分别是多少？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销售额"],
+        "columns": ["fact_sales.date_id", "fact_sales.actual_amount", "dim_date.is_holiday"],
+        "values": []
+      },
+      "golden_sql": "SELECT date_id, ROUND(SUM(actual_amount), 2) AS amount FROM fact_sales WHERE date_id BETWEEN 20261001 AND 20261007 GROUP BY date_id ORDER BY date_id",
+      "notes": "10-01 3,499,301.10 / 10-02 3,206,784.05 / 10-03 3,318,470.60 / 10-04 3,103,925.35 / 10-05 2,864,510.80 / 10-06 2,907,090.25 / 10-07 2,771,043.05；测日期粒度聚合与区间裁剪"
+    },
+    {
+      "id": "anta_sales_1001",
+      "query": "10 月 1 日的销售额是多少？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销售额"],
+        "columns": ["fact_sales.date_id", "fact_sales.actual_amount"],
+        "values": []
+      },
+      "golden_sql": "SELECT ROUND(SUM(actual_amount), 2) AS amount FROM fact_sales WHERE date_id = 20261001",
+      "notes": "单日单值 3,499,301.10；测『中文日期 → date_id』的规范化"
+    },
+    {
+      "id": "anta_qty_by_series",
+      "query": "按产品系列统计国庆期间的销量",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销量"],
+        "columns": ["dim_product.series", "fact_sales.quantity", "fact_sales.sku_id"],
+        "values": []
+      },
+      "golden_sql": "SELECT p.series, SUM(s.quantity) AS qty FROM fact_sales s JOIN dim_sku k ON s.sku_id = k.sku_id JOIN dim_product p ON k.product_id = p.product_id WHERE s.date_id BETWEEN 20261001 AND 20261007 GROUP BY p.series ORDER BY qty DESC",
+      "notes": "6 行：生活 30,480 / 综训 20,898 / 跑步 19,433 / 篮球 12,587 / 潮流 8,982 / 足球 784。注：meta 描述里列了 7 个系列，库中无『冠军』系列商品（实际 6 行）"
+    },
+    {
+      "id": "anta_top_shoe_sales",
+      "query": "国庆期间哪双鞋卖得最好？卖了多少钱、多少件？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销售额", "销量"],
+        "columns": ["dim_product.product_name", "dim_product.category_l1", "fact_sales.actual_amount", "fact_sales.quantity"],
+        "values": []
+      },
+      "golden_sql": null,
+      "notes": "Top1 = ECLOSION TYPE 1：¥974,546.40 / 720 件；Top5 = ECLOSION TYPE 1 / 狂潮8 PRO 918,314.10 / 冠军5 683,779.40 / C202G92 536,263.20 / 狂潮8 510,409.80。不设 golden：TopN 行数不可控"
+    },
+    {
+      "id": "anta_member_split",
+      "query": "国庆期间会员和非会员的销售额分别是多少？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销售额"],
+        "columns": ["fact_sales.is_member", "fact_sales.actual_amount", "fact_sales.quantity"],
+        "values": []
+      },
+      "golden_sql": "SELECT is_member, ROUND(SUM(actual_amount), 2) AS amount, SUM(quantity) AS qty FROM fact_sales WHERE date_id BETWEEN 20261001 AND 20261007 GROUP BY is_member ORDER BY is_member",
+      "notes": "非会员 13,124,682.50 / 56,319 件；会员 8,546,442.70 / 36,845 件。注意：正确性比对是行多重集，agent 若把 0/1 渲染成『会员/非会员』文字会判不匹配（本用例保留 golden，用于观测该渲染差异）"
+    },
+    {
+      "id": "anta_orders_count",
+      "query": "国庆 7 天一共产生了多少笔订单、卖出多少件商品？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销量"],
+        "columns": ["fact_sales.order_id", "fact_sales.quantity", "fact_sales.date_id"],
+        "values": []
+      },
+      "golden_sql": "SELECT COUNT(DISTINCT order_id) AS orders, SUM(quantity) AS qty FROM fact_sales WHERE date_id BETWEEN 20261001 AND 20261007",
+      "notes": "36,077 单 / 93,164 件（明细行 77,607 行）。测订单去重与销量求和的区分"
+    },
+    {
+      "id": "anta_accessory_sales",
+      "query": "国庆期间配件类的销售额是多少？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销售额"],
+        "columns": ["dim_product.category_l1", "fact_sales.actual_amount", "fact_sales.sku_id"],
+        "values": ["配件类"]
+      },
+      "golden_sql": "SELECT ROUND(SUM(s.actual_amount), 2) AS amount FROM fact_sales s JOIN dim_sku k ON s.sku_id = k.sku_id JOIN dim_product p ON k.product_id = p.product_id WHERE p.category_l1 = '配件类' AND s.date_id BETWEEN 20261001 AND 20261007",
+      "notes": "126,871.50。问句字面含『配件类』→ 同时检验取值召回通道（values）"
+    },
+    {
+      "id": "anta_attr_clearance_sales",
+      "query": "国庆期间断码清仓的商品卖了多少钱？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销售额", "销量"],
+        "columns": ["dim_product.sale_attr", "fact_sales.actual_amount", "fact_sales.quantity"],
+        "values": ["断码清仓"]
+      },
+      "golden_sql": "SELECT ROUND(SUM(s.actual_amount), 2) AS amount FROM fact_sales s JOIN dim_sku k ON s.sku_id = k.sku_id JOIN dim_product p ON k.product_id = p.product_id WHERE p.sale_attr = '断码清仓' AND s.date_id BETWEEN 20261001 AND 20261007",
+      "notes": "8,219,892.90 / 49,888 件。对照：正价转特卖 13,451,232.30 / 43,276 件；过季商品与特卖专供款本期 0 销售（dim_product 有 4 种 sale_attr，事实只有 2 种）"
+    },
+    {
+      "id": "anta_worst_category",
+      "query": "国庆期间哪个一级品类卖得最差？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销售额"],
+        "columns": ["dim_product.category_l1", "fact_sales.actual_amount", "fact_sales.sku_id"],
+        "values": []
+      },
+      "golden_sql": null,
+      "notes": "正解=配件类 126,871.50（不足鞋类的 1%）。不设 golden：排序方向+LIMIT 行数不可控，且『卖得最差』可能被理解为销量而非销售额（口径分歧）"
+    },
+    {
+      "id": "anta_qty_by_category",
+      "query": "国庆期间各一级品类各卖了多少件？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销量"],
+        "columns": ["dim_product.category_l1", "fact_sales.quantity"],
+        "values": []
+      },
+      "golden_sql": "SELECT p.category_l1, SUM(s.quantity) AS qty FROM fact_sales s JOIN dim_sku k ON s.sku_id = k.sku_id JOIN dim_product p ON k.product_id = p.product_id WHERE s.date_id BETWEEN 20261001 AND 20261007 GROUP BY p.category_l1 ORDER BY qty DESC",
+      "notes": "鞋类 45,599 / 服装类 45,279 / 配件类 2,286。与 anta_sales_by_category 成对：金额分布与件数分布差异大（鞋类件数仅略高，金额却近 2 倍）"
+    },
+    {
+      "id": "anta_inv_available_now",
+      "query": "现在还有多少可用库存？",
+      "capability": "inventory",
+      "enabled": true,
+      "expected": {
+        "intent": "inventory",
+        "tools": ["inventory.query"],
+        "metrics": ["可用库存"],
+        "columns": ["dim_inventory_snapshot.available_qty", "dim_inventory_snapshot.snapshot_date", "dim_inventory_snapshot.sku_id"],
+        "values": []
+      },
+      "golden_sql": "SELECT SUM(available_qty) AS available_qty FROM dim_inventory_snapshot WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM dim_inventory_snapshot)",
+      "notes": "『当前库存』口径=最新快照日，当前为 20261009 → 256,011。golden 刻意写成 MAX(snapshot_date) 子查询而非硬编码日期：daily_append 再追加一天时两边同口径漂移，不会因日切失效（对照：10-07 快照 258,750）"
+    },
+    {
+      "id": "anta_inv_broken_size",
+      "query": "现在有哪些 SKU 断码了？",
+      "capability": "inventory",
+      "enabled": true,
+      "expected": {
+        "intent": "inventory",
+        "tools": ["inventory.query"],
+        "metrics": ["断码SKU数"],
+        "columns": ["dim_inventory_snapshot.available_qty", "dim_inventory_snapshot.snapshot_date", "dim_inventory_snapshot.sku_id"],
+        "values": []
+      },
+      "golden_sql": "SELECT COUNT(*) AS broken_sku FROM dim_inventory_snapshot WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM dim_inventory_snapshot) AND available_qty = 0",
+      "notes": "100 个断码 SKU（鞋类 34 / 服装类 51 / 配件类 15），10-07、10-08、10-09 三日均为 100。断码定义=可用库存为 0"
+    },
+    {
+      "id": "anta_inv_available_1007",
+      "query": "10 月 7 日盘点那天，可用库存合计是多少件？",
+      "capability": "inventory",
+      "enabled": true,
+      "expected": {
+        "intent": "inventory",
+        "tools": ["inventory.query"],
+        "metrics": ["可用库存"],
+        "columns": ["dim_inventory_snapshot.available_qty", "dim_inventory_snapshot.snapshot_date"],
+        "values": []
+      },
+      "golden_sql": "SELECT SUM(available_qty) AS available_qty FROM dim_inventory_snapshot WHERE snapshot_date = 20261007",
+      "notes": "258,750（固定日期口径）。与 anta_inv_available_now 构成对照：检验 agent 是否区分『指定日快照』与『最新日快照』"
+    },
+    {
+      "id": "anta_inv_loss",
+      "query": "国庆期间报损出库了多少件？都是谁经手的？",
+      "capability": "inventory",
+      "enabled": true,
+      "expected": {
+        "intent": "inventory",
+        "tools": ["inventory.query"],
+        "metrics": [],
+        "columns": ["fact_inventory_flow.flow_type", "fact_inventory_flow.quantity", "fact_inventory_flow.operator", "fact_inventory_flow.date_id"],
+        "values": ["报损出库"]
+      },
+      "golden_sql": "SELECT IFNULL(operator, '系统') AS operator, SUM(-quantity) AS qty FROM fact_inventory_flow WHERE flow_type = '报损出库' AND date_id BETWEEN 20261001 AND 20261007 GROUP BY operator",
+      "notes": "5 行 / 13 件，经办人=晚班·李店长（题库 Q8 基线一致）。全库另有 1 行 1 件报损在国庆档之后（库管·李慧），故日期区间必须显式限定"
+    },
+    {
+      "id": "anta_inv_flow_net",
+      "query": "国庆期间出入库的净变化是多少件？",
+      "capability": "inventory",
+      "enabled": true,
+      "expected": {
+        "intent": "inventory",
+        "tools": ["inventory.query"],
+        "metrics": [],
+        "columns": ["fact_inventory_flow.quantity", "fact_inventory_flow.flow_type", "fact_inventory_flow.date_id"],
+        "values": []
+      },
+      "golden_sql": "SELECT SUM(quantity) AS net_qty FROM fact_inventory_flow WHERE date_id BETWEEN 20261001 AND 20261007",
+      "notes": "-21,493（14,544 行）。构成：补货入库 47,955 + 21,815、退货入库 1,914、报损 -13、销售出库 -93,164。行数含 2 笔漏登补录（RK2026101201/RK2026101202，已归位到 20261007），故 14,544 而非 14,542"
+    },
+    {
+      "id": "anta_replenish_shoes",
+      "query": "生成鞋类的补货计划",
+      "capability": "replenish",
+      "enabled": true,
+      "expected": {
+        "intent": "replenish",
+        "tools": ["replenish.plan"],
+        "metrics": ["可用库存"],
+        "columns": ["dim_replenish_policy.coverage_days", "dim_replenish_policy.safety_days", "dim_inventory_snapshot.available_qty", "fact_sales.quantity", "fact_sales.sku_id"],
+        "values": ["鞋类"]
+      },
+      "golden_sql": null,
+      "notes": "固化算法（非 LLM 算数）：日均销量窗口=库里 fact_sales 全部日期（当前 20261001~20261009 共 9 天），目标=日均×(覆盖 7+安全 3)，可用取最新快照。实算 235 个缺口 SKU、合计 5,671 件。注：题库记录的 5,681 件是 7 天窗口/10-07 快照时点值——daily_append 后窗口自动变 9 天，故有漂移（SKU 数同为 235）。不设 golden：结果集 235 行，且 result_sample 只取前 20 行"
+    },
+    {
+      "id": "anta_replenish_apparel",
+      "query": "服装类的补货计划做一下",
+      "capability": "replenish",
+      "enabled": true,
+      "expected": {
+        "intent": "replenish",
+        "tools": ["replenish.plan"],
+        "metrics": ["可用库存"],
+        "columns": ["dim_replenish_policy.coverage_days", "dim_replenish_policy.safety_days", "dim_inventory_snapshot.available_qty", "fact_sales.quantity", "fact_sales.sku_id"],
+        "values": ["服装类"]
+      },
+      "golden_sql": null,
+      "notes": "覆盖 3+安全 3=6 天；实算 264 个缺口 SKU / 10,506 件（配件类对照：覆盖 14+3=17 天，3 个 SKU / 73 件——品类策略差异是本题的核心观测点）"
+    },
+    {
+      "id": "anta_mt_category_drill",
+      "query": "那只看鞋类呢？",
+      "capability": "dataquery",
+      "enabled": true,
+      "dialogue": ["国庆期间各一级品类的销售额分别是多少？", "那只看鞋类呢？"],
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销售额"],
+        "columns": ["dim_product.category_l1", "fact_sales.actual_amount"],
+        "values": ["鞋类"]
+      },
+      "golden_sql": "SELECT ROUND(SUM(s.actual_amount), 2) AS amount FROM fact_sales s JOIN dim_sku k ON s.sku_id = k.sku_id JOIN dim_product p ON k.product_id = p.product_id WHERE p.category_l1 = '鞋类' AND s.date_id BETWEEN 20261001 AND 20261007",
+      "notes": "多轮条件继承：末轮继承『国庆档 + 销售额』，只加 category_l1='鞋类' → 13,862,669.65。expected/golden 只对末轮评估"
+    },
+    {
+      "id": "anta_mt_inv_drill",
+      "query": "那鞋类呢？",
+      "capability": "inventory",
+      "enabled": true,
+      "dialogue": ["现在还有多少可用库存？", "那鞋类呢？"],
+      "expected": {
+        "intent": "inventory",
+        "tools": ["inventory.query"],
+        "metrics": ["可用库存"],
+        "columns": ["dim_product.category_l1", "dim_inventory_snapshot.available_qty", "dim_inventory_snapshot.snapshot_date"],
+        "values": ["鞋类"]
+      },
+      "golden_sql": "SELECT SUM(n.available_qty) AS available_qty FROM dim_inventory_snapshot n JOIN dim_sku k ON n.sku_id = k.sku_id JOIN dim_product p ON k.product_id = p.product_id WHERE n.snapshot_date = (SELECT MAX(snapshot_date) FROM dim_inventory_snapshot) AND p.category_l1 = '鞋类'",
+      "notes": "138,602（鞋类占全店 256,011 的 54%）。跨能力多轮：首轮 inventory、末轮仍 inventory，检验『最新快照』口径在多轮中是否守住"
+    },
+    {
+      "id": "anta_mt_coref_qty",
+      "query": "它一共卖了多少件？",
+      "capability": "dataquery",
+      "enabled": true,
+      "dialogue": ["国庆期间哪双鞋卖得最好？", "它一共卖了多少件？"],
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销量"],
+        "columns": ["fact_sales.quantity", "dim_product.product_name"],
+        "values": []
+      },
+      "golden_sql": null,
+      "notes": "指代消解：『它』= ECLOSION TYPE 1 → 720 件。不设 golden：指代目标本身是判定对象，golden 会循环论证"
+    },
+    {
+      "id": "anta_mt_gender_run",
+      "query": "只看跑鞋呢？",
+      "capability": "dataquery",
+      "enabled": true,
+      "dialogue": ["国庆期间女款商品卖了多少件？", "只看跑鞋呢？"],
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销量"],
+        "columns": ["dim_product.gender", "dim_product.category_l2", "fact_sales.quantity"],
+        "values": ["跑鞋"]
+      },
+      "golden_sql": null,
+      "notes": "严格口径：gender='女' 26,939 件；末轮 gender='女' AND category_l2='跑鞋' = 1,561 件。若把『男女同款』也算女款则数值更高——口径有分歧，故不设 golden，只看 agent 是否把口径说清楚"
+    },
+    {
+      "id": "anta_default_order",
+      "query": "帮我下单 5 件 T 恤",
+      "capability": "default",
+      "enabled": true,
+      "expected": {
+        "intent": "default",
+        "tools": [],
+        "metrics": [],
+        "columns": [],
+        "values": []
+      },
+      "golden_sql": null,
+      "notes": "写意图探针只认句首方向词（入库/收货/出库），『下单』不在其中 → 不应进出入库流程，落 default 并说明本店只能登记出入库/查询"
+    },
+    {
+      "id": "anta_default_whoami",
+      "query": "你是谁？",
+      "capability": "default",
+      "enabled": true,
+      "expected": {
+        "intent": "default",
+        "tools": [],
+        "metrics": [],
+        "columns": [],
+        "values": []
+      },
+      "golden_sql": null,
+      "notes": "能力自我介绍，不应触发任何工具；expected.tools 为空 = 多调即扣分"
+    },
+    {
+      "id": "anta_out_of_range",
+      "query": "上个月的销售额是多少？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": ["销售额"],
+        "columns": ["fact_sales.date_id", "fact_sales.actual_amount"],
+        "values": []
+      },
+      "golden_sql": null,
+      "notes": "边界：dim_date 覆盖 2025-01-01~2026-10-09，但事实数据只有 20261001 起 → 正解=说明『无该区间数据/数据范围仅 20261001~20261009』，而非报错或编造数字。不设 golden（正解是说明而非结果集）"
+    },
+    {
+      "id": "anta_holiday_days",
+      "query": "国庆期间有几天是节假日？",
+      "capability": "dataquery",
+      "enabled": true,
+      "expected": {
+        "intent": "dataquery",
+        "tools": ["dataquery.search"],
+        "metrics": [],
+        "columns": ["dim_date.is_holiday", "dim_date.date_id"],
+        "values": []
+      },
+      "golden_sql": "SELECT COUNT(*) AS holidays FROM dim_date WHERE is_holiday = '是' AND date_id BETWEEN 20261001 AND 20261007",
+      "notes": "7 天（10-01~10-07 全为节假日）。测维表直查：不该去扫 fact_sales（expected.columns 只给 dim_date 两列）"
+    }
+  ]
+}
