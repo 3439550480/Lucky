@@ -51,7 +51,8 @@ async def default_answer(state: DataAgentState, runtime: Runtime[DataAgentContex
                     from app.agent.memory.retriever import retrieve_memory_block
                     memory_block = await retrieve_memory_block(
                         query, runtime.context.get("memory_store"),
-                        runtime.context.get("embedding_client"))
+                        runtime.context.get("embedding_client"),
+                        staff=runtime.context.get("staff"))
                 except Exception as e:
                     logger.warning(f"[memory] 记忆注入失败（跳过）: {e}")
             chain = PromptTemplate(

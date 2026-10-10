@@ -38,13 +38,20 @@ def new_id() -> str:
 class SimpleNote:
     """Simple Note：最小、不可再分的原子事实。
     优点：极低开销（一行一事实）；缺点：丢失信息关联性。
-    用途：(1) 承接大量但非关键的日常信息；(2) 为上下文管理加入"状态栏"做准备"""
+    用途：(1) 承接大量但非关键的日常信息；(2) 为上下文管理加入"状态栏"做准备
+
+    [2.0 上下文策略 2.1 双层作用域] scope/owner_id：personal（owner=staff_id）/
+    store（owner=ST001 门店常量）。默认值保证存量 JSON（无此二字段）反序列化
+    自动落为 personal+空 owner——retriever 把空 owner 视为"旧全局条目，全员可见"
+    （向后兼容：老记忆不因升级消失）"""
 
     id: str
-    content: str                          # 原子事实，如 "用户会员号是123456"
+    content: str                          # 原子事实，如 "用户的会员号是123456"
     ts: float
     source_thread_id: str                 # 溯源：哪个会话提供的
     vector: list[float] | None = None     # 内容 embedding（随写随存，检索用）
+    scope: str = "personal"               # personal / store
+    owner_id: str = ""                    # staff_id 或 store_id（ST001）；空=存量全局条目
 
 
 @dataclass
@@ -54,14 +61,16 @@ class MemoryCard:
     用途：关键且少量的数据（用户偏好、关键人物关系），支撑管家式主动服务"""
 
     id: str
-    subject: str                          # 主体身份，如 "用户本人" / "用户的母亲"
-    relation_to_user: str                 # 与用户的关系及服务含义
+    subject: str                          # 主体身份，如 "用户本人" / "门店"
+    relation_to_user: str                 # 与用户的关系及服务含义（门店场景 = "这条信息将来怎么用"）
     facts: list                           # 该卡片下的事实列表
     narrative: str                        # 叙事背景：知识怎么来、agent 如何主动使用
     ts: float
     source_thread_id: str
     updated_at: float | None = None
     vector: list[float] | None = None
+    scope: str = "personal"               # [2.0] personal / store（同 SimpleNote 兼容语义）
+    owner_id: str = ""                    # staff_id 或 store_id；空=存量全局条目
 
 
 class MemoryStore(ABC):

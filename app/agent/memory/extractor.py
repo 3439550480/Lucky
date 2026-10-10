@@ -41,10 +41,28 @@ async def _embed(text: str, embedding_client) -> list | None:
         return None
 
 
+# 门店常量（策略第三章待确认项 3：单店演示，store_id 固定）
+STORE_ID = "ST001"
+
+
+def _downgrade_scope(scope: str, staff) -> str:
+    """门店层写入门禁（2.0 上下文策略 2.1/2.7）：仅店长/库管可写门店层。
+    判定用 replenish.store 权限点（矩阵中恰好 MANAGER/KEEPER 持有——等价判定）。
+    无权时降级为 personal 而非丢弃：临时工说的话对他自己仍有价值（降级不丢弃）"""
+    if scope != "store":
+        return "personal"
+    if staff is not None and staff.has("replenish.store"):
+        return "store"
+    logger.warning("[memory] 无权写入门店层（需店长/库管），降级为个人层")
+    return "personal"
+
+
 async def extract_memories(query: str, answer: str, store: MemoryStore,
                            llm, tracker, embedding_client,
-                           thread_id: str) -> dict:
-    """运行后提取入口（06 §3.3 v1.1）。返回 {"notes_added": int, "cards_added": int}"""
+                           thread_id: str, staff=None) -> dict:
+    """运行后提取入口（06 §3.3 v1.1；2.0 双层作用域）。
+    staff：登录员工身份——个人层 owner_id 与门店层写入门禁的依据。
+    返回 {"notes_added": int, "cards_added": int}"""
     notes_added = cards_added = 0
     try:
         # step 1: LLM 上下文压缩（单通道，run_name 使 tracker by_stage 归属 memory_extract）
@@ -66,20 +84,32 @@ async def extract_memories(query: str, answer: str, store: MemoryStore,
         existing = {n.content for n in store.all_notes()}
         existing |= {f for c in store.all_cards() for f in c.facts}
 
-        # step 3: 写入 SimpleNotes（向量化 → 落库；单条失败不阻断批次）
-        for fact in (result.get("notes") if isinstance(result, dict) else None) or []:
-            fact = (fact or "").strip()
-            if not fact or fact in existing:
+        # step 3: 写入 SimpleNotes（2.0：notes 为 {content, scope} 对象；
+        # 兼容旧字符串形态。作用域判定 + 门店层写入门禁（降级不丢弃））
+        raw_notes = (result.get("notes") if isinstance(result, dict) else None) or []
+        for item in raw_notes:
+            if isinstance(item, dict):
+                content = (item.get("content") or "").strip()
+                scope = item.get("scope", "personal")
+            else:
+                content, scope = (item or "").strip(), "personal"
+            if not content or content in existing:
                 continue
-            vector = await _embed(fact, embedding_client)
+            scope = _downgrade_scope(scope, staff)
+            owner_id = staff.staff_id if (staff and scope == "personal") else (
+                STORE_ID if scope == "store" else "")
+            vector = await _embed(content, embedding_client)
             store.save_note(SimpleNote(
-                id=new_id(), content=fact, ts=time.time(),
-                source_thread_id=thread_id, vector=vector))
-            existing.add(fact)
+                id=new_id(), content=content, ts=time.time(),
+                source_thread_id=thread_id, vector=vector,
+                scope=scope, owner_id=owner_id))
+            existing.add(content)
             notes_added += 1
 
-        # step 4: 写入 MemoryCards（向量取 subject+facts 的联合语义；残缺卡片不落库）
-        for card in (result.get("cards") if isinstance(result, dict) else None) or []:
+        # step 4: 写入 MemoryCards（向量取 subject+facts 的联合语义；残缺卡片不落库；
+        # [2.0] scope 同走门禁降级，owner_id 随 scope）
+        raw_cards = (result.get("cards") if isinstance(result, dict) else None) or []
+        for card in raw_cards:
             card = card or {}
             subject = (card.get("subject") or "").strip()
             facts = [f.strip() for f in (card.get("facts") or []) if (f or "").strip()]
@@ -88,12 +118,16 @@ async def extract_memories(query: str, answer: str, store: MemoryStore,
             new_facts = [f for f in facts if f not in existing]
             if not new_facts:
                 continue                      # 全部事实都已存在 → 不重复建卡
+            scope = _downgrade_scope(card.get("scope", "personal"), staff)
+            owner_id = staff.staff_id if (staff and scope == "personal") else (
+                STORE_ID if scope == "store" else "")
             vector = await _embed(subject + "；" + "；".join(new_facts), embedding_client)
             store.save_card(MemoryCard(
                 id=new_id(), subject=subject,
                 relation_to_user=card.get("relation_to_user", ""),
                 facts=new_facts, narrative=card.get("narrative", ""),
-                ts=time.time(), source_thread_id=thread_id, vector=vector))
+                ts=time.time(), source_thread_id=thread_id, vector=vector,
+                scope=scope, owner_id=owner_id))
             existing.update(new_facts)
             cards_added += 1
     except Exception as e:

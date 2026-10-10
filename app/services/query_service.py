@@ -160,6 +160,7 @@ class QueryService:
                         tracker=tracker,
                         embedding_client=self.embedding_client,
                         thread_id=thread_id,
+                        staff=staff,   # [2.0] 个人层 owner_id + 门店层写入门禁的依据
                     )
                 except Exception as e:
                     logger.warning(f"[memory] 记忆提取异常（不影响主链路）: {e}")
