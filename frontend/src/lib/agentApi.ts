@@ -8,6 +8,89 @@ import type { AgentEvent, CapabilitiesResponse, ModelsResponse } from "../types/
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "";
 
+// ==================== 登录态（2.0 上下文策略 0.2）====================
+
+export type StaffInfo = {
+  staff_id: string;
+  name: string;
+  role_codes: string[];
+  role_name: string;
+};
+
+export type HotInsight = { product_name: string; quantity: number; amount: number };
+
+// [认证] 401 专用错误：调用方（App）据此切换到登录页（与普通网络错误区分）
+export class AuthExpiredError extends Error {}
+
+const AUTH_KEY = "auth_token";
+
+function getToken(): string | null {
+  return sessionStorage.getItem(AUTH_KEY);
+}
+
+function setToken(token: string | null): void {
+  if (token) sessionStorage.setItem(AUTH_KEY, token);
+  else sessionStorage.removeItem(AUTH_KEY);
+}
+
+// [认证] 所有受保护请求统一注入 Bearer token
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+// ==================== 登录 / 登出 / 身份 / 洞察 ====================
+
+export async function login(staffId: string, pin: string): Promise<StaffInfo> {
+  const response = await fetch(`${API_BASE_URL}/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ staff_id: staffId, pin }),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(body?.detail ?? `登录失败：HTTP ${response.status}`);
+  }
+  const data = (await response.json()) as { token: string; staff: StaffInfo };
+  setToken(data.token);
+  return data.staff;
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await fetch(`${API_BASE_URL}/api/logout`, { method: "POST", headers: authHeaders() });
+  } finally {
+    setToken(null);
+  }
+}
+
+// 刷新后恢复登录态：token 有效返回身份，失效清 token 返回 null（跳登录页）
+export async function fetchMe(): Promise<StaffInfo | null> {
+  if (!getToken()) return null;
+  const response = await fetch(`${API_BASE_URL}/api/me`, { headers: authHeaders() });
+  if (response.status === 401) {
+    setToken(null);
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(`获取身份失败：HTTP ${response.status}`);
+  }
+  const data = (await response.json()) as { staff: StaffInfo };
+  return data.staff;
+}
+
+export async function fetchHotInsights(): Promise<HotInsight[]> {
+  const response = await fetch(`${API_BASE_URL}/api/insights/hot`, { headers: authHeaders() });
+  if (response.status === 401) {
+    setToken(null);
+    throw new AuthExpiredError("登录已失效");
+  }
+  if (!response.ok) {
+    throw new Error(`获取热卖排行失败：HTTP ${response.status}`);
+  }
+  return (await response.json()) as HotInsight[];
+}
+
 // 调用 streamQuery 时能传的参数：
 // signal：一个「取消令牌」。用户点「停止」时，你把它 abort，请求就会中断。
 // model / capability：用户选的模型和能力，可以不选。
@@ -49,7 +132,14 @@ export function setThreadId(id: string): void {
 
 // [NEW] 获取可用模型列表（后端从配置读取，前端零硬编码）
 export async function fetchModels(signal?: AbortSignal): Promise<ModelsResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/models`, { signal });
+  const response = await fetch(`${API_BASE_URL}/api/models`, {
+    signal,
+    headers: authHeaders(),
+  });
+  if (response.status === 401) {
+    setToken(null);
+    throw new AuthExpiredError("登录已失效");
+  }
   if (!response.ok) {
     throw new Error(`获取模型列表失败：HTTP ${response.status}`);
   }
@@ -58,7 +148,14 @@ export async function fetchModels(signal?: AbortSignal): Promise<ModelsResponse>
 
 // [NEW] 获取可选能力芯片列表（selectable=true 的能力）
 export async function fetchCapabilities(signal?: AbortSignal): Promise<CapabilitiesResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/capabilities`, { signal });
+  const response = await fetch(`${API_BASE_URL}/api/capabilities`, {
+    signal,
+    headers: authHeaders(),
+  });
+  if (response.status === 401) {
+    setToken(null);
+    throw new AuthExpiredError("登录已失效");
+  }
   if (!response.ok) {
     throw new Error(`获取能力列表失败：HTTP ${response.status}`);
   }
@@ -78,12 +175,17 @@ export async function streamQuery(query: string, options: QueryOptions) {
     headers: {
       "Content-Type": "application/json",
       Accept: "text/event-stream",
+      ...authHeaders(),
     },
     body: JSON.stringify(payload),
     signal: options.signal,
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      setToken(null);
+      throw new AuthExpiredError("登录已失效，请重新登录");
+    }
     throw new Error(`接口请求失败：HTTP ${response.status}`);
   }
 

@@ -3,15 +3,24 @@
  * 聊天会话状态（多会话）· SSE 事件消费 · 整体布局
  * 视觉：语义 token（tailwind 语义色）+ 亮/暗双主题
  */
-import { BarChart3, Eraser, Leaf } from "lucide-react";
+import { BarChart3, Eraser, Leaf, LogOut } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Composer } from "./components/Composer";
 import { EmptyState } from "./components/EmptyState";
+import { LoginPage } from "./components/LoginPage";
 import { MessageBubble } from "./components/MessageBubble";
 import SessionSidebar from "./components/SessionSidebar";
 import ThemeToggle from "./components/ThemeToggle";
 import { streamQuery } from "./lib/agentApi";
-import { fetchCapabilities, fetchModels, isAbortError } from "./lib/agentApi";
+import {
+  AuthExpiredError,
+  fetchCapabilities,
+  fetchMe,
+  fetchModels,
+  isAbortError,
+  logout as apiLogout,
+} from "./lib/agentApi";
+import type { StaffInfo } from "./lib/agentApi";
 import { cn, summarizeResult, uuid } from "./lib/format";
 import { useSessions } from "./lib/useSessions";
 import { useTheme } from "./lib/theme";
@@ -50,7 +59,24 @@ export default function App() {
   const [activeController, setActiveController] = useState<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
+  // ==== 登录态（2.0 上下文策略 0.2：token=sessionStorage；刷新后经 /api/me 恢复）====
+  const [staff, setStaff] = useState<StaffInfo | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setStaff(await fetchMe());
+      } catch {
+        setStaff(null);         // /api/me 网络异常也走登录页（token 仍在，登录后可恢复）
+      } finally {
+        setAuthReady(true);
+      }
+    })();
+  }, []);
+
   // ==== 模型与能力芯片（02 文档 §3.6：模型=localStorage 跨会话偏好；thread_id=sessionStorage 会话隔离）====
+  // [2.0] 登录后才拉取——全端点受鉴权保护
   const [models, setModels] = useState<ModelInfo[]>([]);            // 空 = 后端不可达，按钮隐藏
   const [defaultModel, setDefaultModel] = useState("");
   const [selectedModel, setSelectedModel] = useState("");           // 空串 = 请求不带 model 字段
@@ -58,6 +84,7 @@ export default function App() {
   const [selectedCapability, setSelectedCapability] = useState(""); // 空串 = 未选芯片（自动路由）
 
   useEffect(() => {
+    if (!staff) return;
     const controller = new AbortController();
     (async () => {
       try {
@@ -81,7 +108,15 @@ export default function App() {
       }
     })();
     return () => controller.abort();
-  }, []);
+  }, [staff]);
+
+  const handleLogout = async () => {
+    if (isStreaming) return;
+    await apiLogout();
+    setStaff(null);
+    setModels([]);
+    setCapabilities([]);
+  };
 
   const handleModelChange = (name: string) => {
     setSelectedModel(name);
@@ -192,6 +227,18 @@ export default function App() {
         capability: selectedCapability || undefined,
       });
     } catch (error) {
+      // [2.0 认证] 401 → 清登录态回登录页（token 已在 agentApi 内清除）
+      if (error instanceof AuthExpiredError) {
+        setStaff(null);
+        updateMessages((current) =>
+          current.map((message) =>
+            message.id === assistantId
+              ? { ...message, status: "done", content: "登录已失效，请重新登录后再试。" }
+              : message,
+          ),
+        );
+        return;
+      }
       const isAbort = isAbortError(error);
       updateMessages((current) =>
         current.map((message) =>
@@ -225,6 +272,18 @@ export default function App() {
     deleteSession(id);
   };
 
+  // ==== 登录门（2.0 上下文策略：全端点鉴权，未登录只见登录页）====
+  if (!authReady) {
+    return (
+      <div className="grid h-dvh place-items-center bg-bg text-content">
+        <p className="text-sm text-muted">加载中…</p>
+      </div>
+    );
+  }
+  if (!staff) {
+    return <LoginPage onLogin={setStaff} />;
+  }
+
   // 正常聊天界面
   return (
     <div className="h-dvh overflow-hidden bg-bg text-content">
@@ -253,6 +312,26 @@ export default function App() {
               </div>
             </div>
             <div className="flex items-center gap-1">
+              {/* [2.0] 顶栏身份区：姓名 + 工号 + 角色徽标 + 登出 */}
+              <div className="mr-1 hidden items-center gap-2 sm:flex">
+                <div className="text-right leading-tight">
+                  <div className="text-xs font-semibold">{staff.name}</div>
+                  <div className="text-[10px] text-muted">{staff.staff_id}</div>
+                </div>
+                <span className="rounded-md border border-line bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-muted">
+                  {staff.role_name}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={isStreaming}
+                className="grid h-9 w-9 place-items-center rounded-full text-muted transition hover:bg-surface-2 hover:text-content disabled:cursor-not-allowed disabled:opacity-40"
+                title="登出"
+                aria-label="登出"
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+              </button>
               <ThemeToggle theme={theme} onToggle={toggleTheme} />
               <button
                 type="button"

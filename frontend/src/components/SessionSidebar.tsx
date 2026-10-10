@@ -5,6 +5,7 @@
 import { BarChart3, MessageSquarePlus, Server, Trash2 } from "lucide-react";
 import { cn } from "../lib/format";
 import type { SessionMeta } from "../lib/sessionStore";
+import HotInsightsPanel from "./HotInsightsPanel";
 
 interface SessionSidebarProps {
   sessions: SessionMeta[];
@@ -98,6 +99,9 @@ export default function SessionSidebar({
           </div>
         ))}
       </nav>
+
+      {/* [2.0] 热卖排行固定面板（登录即可见，不占权限点——用户拍板移出对话能力） */}
+      <HotInsightsPanel />
 
       <div className="border-t border-line p-4">
         <div className="flex items-center justify-between gap-3 text-xs text-muted">
