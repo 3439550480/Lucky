@@ -11,7 +11,7 @@ from langchain_core.prompts import PromptTemplate
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
-from app.agent.session.history_provider import get_conversation_history
+from app.agent.session.history_provider import get_conversation_history, render_history
 from app.agent.state import DataAgentState
 from app.conf.app_config import app_config
 from app.core.log import logger
@@ -38,8 +38,8 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
         # 开 = history_provider 全量 + 三区结构（前缀稳定，KV cache 可命中）
         # 关 = 现状行为（最近 10 条 + legacy 混排模板）——对照实验基线
         if app_config.features.context_management:
-            history_yaml = yaml.dump(
-                get_conversation_history(state), allow_unicode=True, sort_keys=False)
+            # [2.0 上下文策略] 历史渲染统一走 render_history（剥离 capability/ts 元数据）
+            history_yaml = render_history(get_conversation_history(state), "yaml")
             template = load_prompt("generate_sql")
             input_variables = ["system_prefix", "conversation_history", "memory_block",
                                "table_infos", "metric_infos", "date_info", "db_info", "query"]

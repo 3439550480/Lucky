@@ -63,6 +63,8 @@ class QueryService:
                 model=app_config.llm.providers[provider_name].get("model", ""),
             )
         # step 2: 组装 state 与 context —— State 放可合并业务数据，Context 放工具与请求级注入物
+        # [2.0 P0 修复] 显式 result=[] 清残留：checkpointer 会恢复上一轮的 result，
+        # 若本轮在 run_sql 前失败，残留旧值存在误用隐患（策略 1.6.14 附带发现）
         state = DataAgentState(
             query=query,
             keywords=[],
@@ -73,6 +75,7 @@ class QueryService:
             metric_infos=[],
             error="",
             sql="",
+            result=[],
             retry_count=0,
             intent="",
             intent_reply="",
@@ -82,6 +85,7 @@ class QueryService:
             tool_calls=[],
         )
         holder = CapabilityHolder()                                  # [04] 每请求新建（防串话）
+        # [2.0 P0 修复] memory_store 接线：此前漏传 → 记忆检索恒空串（读路径断裂）
         context = DataAgentContext(
             column_qdrant_repository=self.column_qdrant_repository,
             embedding_client=self.embedding_client,
@@ -93,6 +97,7 @@ class QueryService:
             capability_holder=holder,
             capability_registry=registry,
             usage_tracker=tracker,
+            memory_store=self.memory_store,
         )
         try:
             # stream_mode="custom" 对应节点内部 writer(...) 写出的进度消息

@@ -5,6 +5,8 @@ generate_sql / default_answer / capability 路由提示词的历史读取全部�
 替换各节点内联的 state["messages"] 切片逻辑（05 §4#9-11 的切换落点）。
 v1 语义：返回全量轨迹（旧→新）——截断参数保留签名但不生效（§3.4 对话完整放入）。
 """
+import yaml
+
 from app.agent.session.context_store import get_trajectory
 
 
@@ -14,6 +16,25 @@ def get_conversation_history(state: dict, *, max_turns: int | None = None,
     v1：max_turns/max_tokens 忽略（对话完整放入，保 KV cache 前缀一致性，§3.4）；
     未来启用时逻辑：倒序取 max_turns 轮 → token 预算粗估截断 → 正序返回"""
     return get_trajectory(state)
+
+
+def render_history(messages: list[dict], style: str = "text") -> str:
+    """历史渲染统一出口（2.0 上下文策略差异 #3）。
+
+    轨迹条目可能携带元数据（capability/ts/staff_id）——这些是审计字段，
+    【不透给模型】。所有节点拼 prompt 的历史段一律经此函数，禁止直接
+    yaml.dump(messages)（会把元数据暴露给模型，还会随元数据增长破坏缓存）。
+
+    style:
+      "text" —— "[role] content" 逐行纯文本（router / default_answer 消费）
+      "yaml" —— 仅 {role, content} 的 yaml（generate_sql / explain_result 消费，
+                保留结构可读性，元数据已剥离）
+    """
+    clean = [{"role": m.get("role", ""), "content": m.get("content", "")}
+             for m in messages or []]
+    if style == "yaml":
+        return yaml.dump(clean, allow_unicode=True, sort_keys=False)
+    return "\n".join(f"[{m['role']}] {m['content']}" for m in clean)
 
 
 def get_recent_assistant_content(state: dict, max_items: int = 5) -> str:

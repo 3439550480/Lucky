@@ -26,7 +26,9 @@ async def run_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]):
         dw_mysql_repository = runtime.context["dw_mysql_repository"]
 
         # 真实数据库访问统一封装在仓储层，节点只负责从状态取 SQL 并触发执行
-        result = await dw_mysql_repository.run(sql)
+        # [2.0 上下文策略 1.6.12] 显式传参（与 replenish 一致）：仓储默认本有
+        # 1000 行/30s 保护，此处显式化避免依赖隐式默认
+        result = await dw_mysql_repository.run(sql, timeout_ms=30000, max_rows=1000)
         logger.info(f"SQL执行结果：{result}")
         writer({"type": "progress", "step": step, "status": "success"})
         writer({"type": "result", "data": result})

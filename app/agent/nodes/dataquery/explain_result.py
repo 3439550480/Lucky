@@ -4,7 +4,7 @@ from langchain_core.prompts import PromptTemplate
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
-from app.agent.session.history_provider import get_conversation_history
+from app.agent.session.history_provider import get_conversation_history, render_history
 from app.agent.state import DataAgentState
 from app.conf.app_config import app_config
 from app.core.log import logger
@@ -45,8 +45,9 @@ async def explain_result(state: DataAgentState, runtime: Runtime[DataAgentContex
         chain = prompt | llm | StrOutputParser()
         explanation = await chain.ainvoke({
             "system_prefix": build_system_prefix(),
-            "conversation_history": yaml.dump(
-                get_conversation_history(state), allow_unicode=True, sort_keys=False),
+            # [2.0 上下文策略] 历史渲染统一走 render_history（剥离元数据）
+            "conversation_history": render_history(
+                get_conversation_history(state), "yaml"),
             "query": query,
             "sql": sql,
             "result": result_yaml,

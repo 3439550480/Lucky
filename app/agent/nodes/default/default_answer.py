@@ -21,6 +21,7 @@ from app.agent.session.context_store import append_assistant_message, append_use
 from app.agent.session.history_provider import (
     get_conversation_history,
     get_recent_assistant_content,
+    render_history,
 )
 from app.agent.session.prefix import build_system_prefix
 from app.agent.state import DataAgentState
@@ -60,10 +61,9 @@ async def default_answer(state: DataAgentState, runtime: Runtime[DataAgentContex
             ) | llm | StrOutputParser()
             chain_input = {
                 "system_prefix": build_system_prefix(),
-                "conversation_history": "\n".join(
-                    f"[{m.get('role')}] {m.get('content', '')}"
-                    for m in get_conversation_history(state)
-                ),
+                # [2.0 上下文策略] 历史渲染统一走 render_history（元数据不透模型）
+                "conversation_history": render_history(
+                    get_conversation_history(state), "text"),
                 "memory_block": memory_block,
                 "query": query,
             }

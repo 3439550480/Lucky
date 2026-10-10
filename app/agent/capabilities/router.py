@@ -19,7 +19,7 @@ from langgraph.runtime import Runtime
 from app.agent.capabilities.registry import CapabilityRegistry
 from app.agent.context import DataAgentContext
 from app.agent.llm_factory import create_llm
-from app.agent.session.history_provider import get_conversation_history
+from app.agent.session.history_provider import get_conversation_history, render_history
 from app.agent.session.prefix import build_system_prefix
 from app.agent.state import DataAgentState
 from app.conf.app_config import app_config
@@ -122,10 +122,9 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
             ) | classifier | JsonOutputParser()
             chain_input = {
                 "system_prefix": build_system_prefix(),
-                "conversation_history": "\n".join(
-                    f"[{m.get('role')}] {m.get('content', '')}"
-                    for m in get_conversation_history(state)
-                ),
+                # [2.0 上下文策略] 历史渲染统一走 render_history（元数据不透模型）
+                "conversation_history": render_history(
+                    get_conversation_history(state), "text"),
                 "query": query,
             }
         else:

@@ -1,18 +1,19 @@
 # 能力注册表：新增能力 = 此文件加一个条目 + 实现一个统一签名的处理节点
 # 详见 docs/design/04_capability_routing.md §2.1
 capabilities:
-  - name: dataquery                   # 电商问数（现有 19 节点链路）
-    description: 基于电商数仓的指标查询与SQL问答
+  - name: dataquery                   # 门店销售问数（14 节点链路；inventory 同入口复用）
+    description: 门店销售数据查询：销售额、销量、折扣率、连带率、会员占比等指标问答
     examples:                         # 双重用途：LLM 分类提示词示例 + embedding 安全网向量化语料
-      - "上个月GMV多少"
-      - "华北地区的复购率"
-      - "查询数据：各地区销售额排行"
-      - "统计一下近7天的订单量"
+      - "国庆7天卖了多少金额"
+      - "昨天哪双鞋卖得最好"
+      - "按品类看销量分布"
+      - "统计一下黄金卡会员的消费"
+      - "平均折扣率是多少"
     entry: extract_keywords           # 图中入口节点名（路由命中后分发到该节点）
     selectable: true                  # 前端能力芯片可见（tier-0 显式选择）
     rules:                            # 规则快路径：只放"高度确定"表述，模糊词交由 embedding/LLM 层
       - "数据查询|查询数据|查一下数据"
-      - "(帮我|给我)?(统计|查询|查一下).{0,12}(GMV|销售额|订单量|复购率|客单价|转化率|销量)"
+      - "(帮我|给我)?(统计|查询|查一下).{0,12}(销售额|销量|GMV|折扣率|营业额|件数|客单价)"
   - name: inventory                   # [2.0 S3b] 库存问数：复用问数链路（entry 与 dataquery 同为
                                       # extract_keywords，领域知识在 meta_config.yaml 库存表语义中；
                                       # Feature Flag：features.capability_inventory）
