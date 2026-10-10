@@ -18,6 +18,7 @@ from app.agent.capabilities.registry import CapabilityRegistry
 from app.agent.usage import LLMUsageTracker
 from app.repositories.es.value_es_repository import ValueESRepository
 from app.repositories.mysql.meta.meta_mysql_repository import MetaMySQLRepository
+from app.repositories.mysql.dw.inventory_write_repository import InventoryWriteRepository
 from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
 from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
 from app.repositories.mysql.dw.dw_mysql_repository import DWMySQLRepository
@@ -48,6 +49,8 @@ class DataAgentContext(TypedDict):
     meta_mysql_repository: MetaMySQLRepository
 
     dw_mysql_repository: DWMySQLRepository
+    # [2.0 第三章] 出入库写仓储（flow_step 确认后的写库入口；幂等/事务/快照联动）
+    inventory_write_repository: "InventoryWriteRepository"
 
     # [01 文档] 按请求创建的 LLM 实例（已挂 usage tracker），节点经 runtime.context 取用
     llm: BaseChatModel

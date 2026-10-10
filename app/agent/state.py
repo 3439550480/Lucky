@@ -101,6 +101,12 @@ class DataAgentState(TypedDict):
     permission_denied: bool    # 路由层权限校验未通过 → 分发到 permission_denied 终点
     denied_permission: str     # 被拒的权限点（deny 节点渲染用，不透给用户）
 
+    # ==== 出入库槽位流程（2.0 上下文策略 第三章）====
+    # [规则3 留档] 流程状态是显式字段（随 checkpointer 持久化），不是靠 LLM 从对话里
+    # "回忆"——可测、可恢复、不幻觉。slots 字典而非 step 步骤号：填充顺序不固定，
+    # "一次能填多少填多少"（策略 3.2）。None = 无进行中的流程
+    pending_action: dict  # {type, slots:{direction,doc_no,sku_id,qty}, started_at, awaiting_confirm}
+
     # ==== 2.0 新能力字段（replenish）====
     # [规则3 留档] S3b 设计拍板：inventory 复用问数链路（结果走 result 字段，不设
     # inventory_rows——原预留字段删除）；replenish 是固化算法单节点，结构化建议写这里

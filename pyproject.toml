@@ -25,3 +25,8 @@ dependencies = [
     "transformers>=4.51.0",        # 新增，兼容新 tokenizers
     "sentence-transformers",       # 新增，解决 ImportError
 ]
+
+[dependency-groups]
+dev = [
+    "playwright>=1.63.0",
+]

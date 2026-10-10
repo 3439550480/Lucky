@@ -68,8 +68,11 @@ graph_builder.add_node("run_sql", run_sql)
 graph_builder.add_node("explain_result", explain_result)
 graph_builder.add_node("fail", fail)
 
-# ---- 注册节点：能力路由 + default + replenish + 权限拒绝（2.0）----
+# ---- 注册节点：流程守卫 + 能力路由 + default + replenish + 权限拒绝（2.0）----
 from app.agent.nodes.common.permission_denied import permission_denied
+from app.agent.nodes.inventory_write import flow_guard, flow_step
+graph_builder.add_node("flow_guard", flow_guard)             # 出入库前置守卫（第三章 3.4）
+graph_builder.add_node("flow_step", flow_step)               # 槽位驱动推进 + 确认门
 graph_builder.add_node("route_capability", route_capability)
 graph_builder.add_node("default_answer", default_answer)
 graph_builder.add_node("replenish_plan", replenish_plan)   # 补货计划（固化算法单节点）
@@ -78,8 +81,25 @@ graph_builder.add_node("permission_denied", permission_denied)  # 权限拒绝�
 # ---- 注册表 fail-fast 校验：能力 entry / routing 兜底必须指向已注册节点（04 §2.2）----
 registry.validate_entries(set(graph_builder.nodes))
 
-# START → 能力路由（取代原 intent_classify 五分类）
-graph_builder.add_edge(START, "route_capability")
+# START → 流程守卫（2.0 第三章：pending_action 存在或写意图 → flow_step，否则能力路由）
+graph_builder.add_edge(START, "flow_guard")
+
+
+def route_after_guard(state: DataAgentState) -> str:
+    if state.get("permission_denied"):
+        return "permission_denied"
+    if state.get("pending_action"):
+        return "flow_step"
+    return "route_capability"
+
+
+graph_builder.add_conditional_edges(
+    source="flow_guard",
+    path=route_after_guard,
+    path_map={"flow_step": "flow_step",
+              "route_capability": "route_capability",
+              "permission_denied": "permission_denied"},
+)
 
 
 def route_by_capability(state: DataAgentState) -> str:
@@ -101,10 +121,11 @@ graph_builder.add_conditional_edges(
     path_map=path_map,
 )
 
-# default / replenish / 权限拒绝：回答即终点
+# default / replenish / 权限拒绝 / 流程节点：单轮即终点（流程状态靠 pending_action 跨轮）
 graph_builder.add_edge("default_answer", END)
 graph_builder.add_edge("replenish_plan", END)
 graph_builder.add_edge("permission_denied", END)
+graph_builder.add_edge("flow_step", END)
 
 # ---- 问数链路边（原样保留）----
 # 抽取关键词后，三路召回并行扇出

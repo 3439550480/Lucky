@@ -32,11 +32,13 @@ class QueryService:
         column_qdrant_repository: ColumnQdrantRepository,
         metric_qdrant_repository: MetricQdrantRepository,
         value_es_repository: ValueESRepository,
+        inventory_write_repository=None,   # [2.0 第三章] 出入库写仓储（flow_step 消费）
         memory_store=None,   # [06] 长期记忆存储（dependencies 注入；None = 记忆功能不可用）
     ):
         # MySQL 仓储分别负责元数据补全和真实数仓环境信息读取
         self.meta_mysql_repository = meta_mysql_repository
         self.dw_mysql_repository = dw_mysql_repository
+        self.inventory_write_repository = inventory_write_repository
 
         # 召回链路依赖的向量检索、Embedding 和全文检索能力由依赖层注入
         self.embedding_client = embedding_client
@@ -97,6 +99,7 @@ class QueryService:
             value_es_repository=self.value_es_repository,
             meta_mysql_repository=self.meta_mysql_repository,
             dw_mysql_repository=self.dw_mysql_repository,
+            inventory_write_repository=self.inventory_write_repository,
             llm=create_llm(provider_name),   # [01] 按请求实例化（tracker 不挂实例——见下方 config 注释）
             capability_holder=holder,
             capability_registry=registry,

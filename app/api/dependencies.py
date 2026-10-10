@@ -25,6 +25,7 @@ from app.agent.memory.store import build_memory_store
 from app.repositories.es.value_es_repository import ValueESRepository
 from app.repositories.mysql.dw.dw_mysql_repository import DWMySQLRepository
 from app.repositories.mysql.dw.insights_repository import InsightsRepository
+from app.repositories.mysql.dw.inventory_write_repository import InventoryWriteRepository
 from app.repositories.mysql.dw.staff_auth_repository import StaffAuthRepository
 from app.repositories.mysql.meta.meta_mysql_repository import MetaMySQLRepository
 from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
@@ -116,6 +117,13 @@ async def get_insights_repository(
     return InsightsRepository(session)
 
 
+async def get_inventory_write_repository(
+    session: Annotated[AsyncSession, Depends(get_dw_session)],
+) -> InventoryWriteRepository:
+    """出入库写仓储（确认门后的写库入口；幂等/事务/快照联动）"""
+    return InventoryWriteRepository(session)
+
+
 async def get_current_staff(request: Request) -> StaffIdentity:
     """鉴权依赖：Authorization: Bearer <token> → StaffIdentity。
     失效（不存在/绝对过期/闲置超时）统一 401 —— 前端据此跳登录页。
@@ -145,6 +153,9 @@ async def get_query_service(
         MetricQdrantRepository, Depends(get_metric_qdrant_repository)
     ],
     value_es_repository: Annotated[ValueESRepository, Depends(get_value_es_repository)],
+    inventory_write_repository: Annotated[
+        InventoryWriteRepository, Depends(get_inventory_write_repository)
+    ],
     memory_store=Depends(get_memory_store),
 ) -> QueryService:
     """组装一次查询所需的业务服务"""
@@ -157,5 +168,6 @@ async def get_query_service(
         column_qdrant_repository=column_qdrant_repository,
         metric_qdrant_repository=metric_qdrant_repository,
         value_es_repository=value_es_repository,
+        inventory_write_repository=inventory_write_repository,
         memory_store=memory_store,
     )
