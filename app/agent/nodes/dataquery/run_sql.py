@@ -29,10 +29,12 @@ async def run_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]):
         # [2.0 上下文策略 1.6.12] 显式传参（与 replenish 一致）：仓储默认本有
         # 1000 行/30s 保护，此处显式化避免依赖隐式默认
         result = await dw_mysql_repository.run(sql, timeout_ms=30000, max_rows=1000)
-        logger.info(f"SQL执行结果：{result}")
+        logger.info(f"SQL执行结果：{len(result)} 行")
         writer({"type": "progress", "step": step, "status": "success"})
-        writer({"type": "result", "data": result})
-        return {"result": result}
+        writer({"type": "result", "data": result})   # 完整结果只走 SSE 给前端
+        # [2.0 上下文策略 1.6.15] state 只留样本：LLM 从不需要看完整结果
+        # （它只要形状+前几行+聚合值；完整结果给前端，两者走不同通道）
+        return {"result_sample": result[:20], "result_total": len(result)}
 
     except Exception as e:
         # [v1.1 FR-07 重写留档] 原版：logger 记录原始异常后直接 raise —— pymysql 内部

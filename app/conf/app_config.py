@@ -84,6 +84,8 @@ class FeatureFlags:
     capability_inventory: bool = True   # 库存问数    开
     capability_replenish: bool = True   # 补货计划    开
     context_management: bool = True   # 上下文管理   开
+    trace_brief: bool = False         # [2.0 P2] 轨迹摘要注入（brief 渲染；默认关，
+                                      # 长会话/评测多轮需求出现时再开——策略 1.6.14）
     memory: MemoryFlags = field(default_factory=MemoryFlags)  # 记忆模块（子开关箱）
     evaluation: EvaluationFlags = field(default_factory=EvaluationFlags)  # 评估模块（子开关箱）
 

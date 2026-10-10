@@ -298,7 +298,7 @@ class EvaluationRunner:
         probe_state = await self._ainvoke(case.query, f"{base}_probe",
                                           tracker, meta_mgr, dw_mgr, qdrant_mgr, emb_mgr, value_es_repo)
         output_text = (probe_state.get("intent_reply") or "") + \
-            _json.dumps(probe_state.get("result") or [], ensure_ascii=False, default=str)
+            _json.dumps(probe_state.get("result_sample") or [], ensure_ascii=False, default=str)
         recalled = all(value_in_text(v, output_text) for v in expected) if expected else True
 
         # ---- 检索层（确定性）：期望值条目必须被 probe query 的向量检索召回 ----
@@ -336,5 +336,5 @@ class EvaluationRunner:
         return {"has_golden": case.golden_sql is not None, "executed": True,
                 "exec_error": None,
                 "golden_rows": golden_rows,
-                "actual_rows": final_state.get("result") or None,
+                "actual_rows": final_state.get("result_sample") or None,
                 "retry_count": final_state.get("retry_count", 0)}

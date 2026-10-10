@@ -79,6 +79,8 @@ features:                     # [NEW] 模块开关（定义见 docs/design/00 §
   capability_inventory: true    # [2.0 S3b] 库存问数（关=恢复 dataquery+default 双能力行为）
   capability_replenish: true    # [2.0 S3b] 补货计划（同上）
   context_management: true
+  trace_brief: false           # [2.0 P2] 轨迹摘要（brief）注入；策略 1.6.14：先不开，
+                               # 出现长会话/评测多轮需求时开启（历史区 ~15 tok/轮）
   memory:
     short_term: true
     long_term: false

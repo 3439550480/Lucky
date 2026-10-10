@@ -35,13 +35,18 @@ def append_user_message(state: dict, query: str, capability: str | None = None,
 
 
 def append_assistant_message(state: dict, content: str, capability: str | None = None,
-                             staff_id: str | None = None) -> list[dict]:
+                             staff_id: str | None = None,
+                             brief: str | None = None) -> list[dict]:
     """追加助手消息（explain_result / default_answer 的写入入口，§4#8）。
-    [2.0 上下文策略 1.1] staff_id：条目级身份（审计与一致性校验用），可缺省"""
+    [2.0 上下文策略 1.1] staff_id：条目级身份（审计与一致性校验用），可缺省。
+    [2.0 上下文策略 1.6.10] brief：轨迹摘要（渲染产物随条目暂存；轨迹仍存完整原文，
+    简洁化统一收口在 history_provider.render_history）。可缺省"""
     messages = list(state.get("messages") or [])
     entry = _new_entry("assistant", content, capability)
     if staff_id:
         entry["staff_id"] = staff_id
+    if brief:
+        entry["brief"] = brief
     messages.append(entry)
     return messages
 

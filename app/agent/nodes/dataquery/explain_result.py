@@ -21,7 +21,7 @@ async def explain_result(state: DataAgentState, runtime: Runtime[DataAgentContex
 
     query = state["query"]
     sql = state["sql"]
-    result = state.get("result", [])  # 需要在 run_sql 节点中写入 result
+    result = state.get("result_sample", [])  # [2.0] state 只存 20 行样本（run_sql 拆分）
     metric_infos = state.get("metric_infos", [])
 
     # 如果没有结果（可能因为异常），跳过解释
@@ -72,9 +72,14 @@ async def explain_result(state: DataAgentState, runtime: Runtime[DataAgentContex
     # 保存助手消息到历史 —— [05] 写入走 context_store（带 capability 元数据）
     if app_config.features.context_management:
         from app.agent.session.context_store import append_assistant_message
+        from app.agent.session.trace_brief import build_brief
         staff = runtime.context.get("staff")
+        # [2.0 上下文策略 1.6.16] brief 随写随算（节点直接生成，零 LLM——
+        # result 列名是中文别名，机械拼接即可）；开关关闭时不写入
+        brief = build_brief(result) if app_config.features.trace_brief else None
         messages = append_assistant_message(state, explanation, capability=state.get("capability"),
-                                            staff_id=staff.staff_id if staff else None)
+                                            staff_id=staff.staff_id if staff else None,
+                                            brief=brief)
     else:
         messages = state.get("messages", [])
         messages.append({"role": "assistant", "content": explanation})

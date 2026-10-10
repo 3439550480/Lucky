@@ -78,7 +78,12 @@ class DataAgentState(TypedDict):
     # 写入:generate_sql、correct_sql,读取:validate_sql、correct_sql、run_sql.作用:保存候选或修正后的 SQL
     error: str  # 校验SQL时出现的错误信息
     # 写入:validate_sql,读取:graph 条件分支、correct_sql.作用:保存 SQL 校验错误
-    result: list[dict]  # 新增：SQL 执行结果
+    # ==== SQL 结果（2.0 上下文策略 1.6.15 拆分）====
+    # [规则3 留档] 原版只有 result（完整行数据进 state）——一个值同时服务三个消费者
+    # （前端要全量/解释只要前3行/checkpointer 不需要），导致快照膨胀+残留隐患。
+    # 拆分：完整结果走 SSE 给前端；state 只留 20 行样本 + 总行数供下游。
+    result_sample: list[dict]  # 前 20 行样本（explain_result / 评估消费）
+    result_total: int          # 完整结果总行数（与样本数对照，识别截断）
     retry_count: int  # 当前已重试次数
     messages: List[Dict[str,Any]]
     # 对话历史，格式 [{"role": "user", "content": "..."}, {"role": "assistant", "content": "解释或结果"}]
