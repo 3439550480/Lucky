@@ -7,7 +7,7 @@ import { BarChart3, Eraser, Leaf, LogOut } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Composer } from "./components/Composer";
 import { EmptyState } from "./components/EmptyState";
-import { LoginPage } from "./components/LoginPage";
+import LoginPage from "./components/LoginPage";
 import { MessageBubble } from "./components/MessageBubble";
 import SessionSidebar from "./components/SessionSidebar";
 import ThemeToggle from "./components/ThemeToggle";
