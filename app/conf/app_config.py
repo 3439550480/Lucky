@@ -133,6 +133,13 @@ class SecurityConfig:
     cost_guard: CostGuardConfig = field(default_factory=CostGuardConfig)
 
 
+@dataclass
+class AuthConfig:
+    """登录会话配置（2.0 上下文策略 0.2；用户拍板：8h 班次级 + 2h 闲置）"""
+    token_ttl_hours: int = 8     # 绝对有效期（签发后 8h 强制过期）
+    idle_timeout_hours: int = 2  # 闲置超时（连续 2h 无请求即失效）
+
+
 # ====== 所有 dataclass 定义保持不变 ======
 @dataclass
 class File:
@@ -198,6 +205,7 @@ class AppConfig:
     session: SessionConfig = field(default_factory=SessionConfig) # [NEW] 上下文管理
     memory: MemoryConfig = field(default_factory=MemoryConfig)    # [NEW] 记忆管理
     security: SecurityConfig = field(default_factory=SecurityConfig)  # [NEW v1.1] 公网防护
+    auth: AuthConfig = field(default_factory=AuthConfig)          # [NEW 2.0] 登录会话
 
 # ====================== 配置加载（修改部分） ======================
 # 修改：配置文件在项目根目录的 conf 文件夹下

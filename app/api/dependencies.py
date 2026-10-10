@@ -19,9 +19,13 @@ from app.clients.mysql_client_manager import (
     meta_mysql_client_manager,
 )
 from app.clients.qdrant_client_manager import qdrant_client_manager
+from app.agent.auth.auth_session_store import auth_session_store
+from app.agent.auth.staff_identity import StaffIdentity
 from app.agent.memory.store import build_memory_store
 from app.repositories.es.value_es_repository import ValueESRepository
 from app.repositories.mysql.dw.dw_mysql_repository import DWMySQLRepository
+from app.repositories.mysql.dw.insights_repository import InsightsRepository
+from app.repositories.mysql.dw.staff_auth_repository import StaffAuthRepository
 from app.repositories.mysql.meta.meta_mysql_repository import MetaMySQLRepository
 from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
 from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
@@ -94,6 +98,36 @@ def get_memory_store():
     if _memory_store is None:
         _memory_store = build_memory_store()
     return _memory_store
+
+
+# ==================== 2.0 身份与认证 ====================
+
+async def get_staff_auth_repository(
+    session: Annotated[AsyncSession, Depends(get_dw_session)],
+) -> StaffAuthRepository:
+    """员工认证仓储（dim_staff，dw 库）"""
+    return StaffAuthRepository(session)
+
+
+async def get_insights_repository(
+    session: Annotated[AsyncSession, Depends(get_dw_session)],
+) -> InsightsRepository:
+    """经营洞察仓储（热卖侧边栏固定查询）"""
+    return InsightsRepository(session)
+
+
+async def get_current_staff(request) -> StaffIdentity:
+    """鉴权依赖：Authorization: Bearer <token> → StaffIdentity。
+    失效（不存在/绝对过期/闲置超时）统一 401 —— 前端据此跳登录页。
+    登录后全端点受保护（热卖侧边栏亦然：登录即可见，不占权限点）"""
+    from fastapi import HTTPException
+
+    auth_header = request.headers.get("authorization", "")
+    token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+    session = auth_session_store.get(token)
+    if session is None:
+        raise HTTPException(status_code=401, detail="登录已失效，请重新登录")
+    return session.identity
 
 
 async def get_query_service(

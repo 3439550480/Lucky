@@ -22,17 +22,27 @@ def get_trajectory(state: dict) -> list[dict]:
     return state.get("messages") or []
 
 
-def append_user_message(state: dict, query: str, capability: str | None = None) -> list[dict]:
-    """追加用户消息，返回完整新列表（extract_keywords 的写入入口，§4#7）"""
+def append_user_message(state: dict, query: str, capability: str | None = None,
+                        staff_id: str | None = None) -> list[dict]:
+    """追加用户消息，返回完整新列表（extract_keywords 的写入入口，§4#7）。
+    [2.0 上下文策略 1.1] staff_id：条目级身份（审计与一致性校验用），可缺省"""
     messages = list(state.get("messages") or [])
-    messages.append(_new_entry("user", query, capability))
+    entry = _new_entry("user", query, capability)
+    if staff_id:
+        entry["staff_id"] = staff_id
+    messages.append(entry)
     return messages
 
 
-def append_assistant_message(state: dict, content: str, capability: str | None = None) -> list[dict]:
-    """追加助手消息（explain_result / default_answer 的写入入口，§4#8）"""
+def append_assistant_message(state: dict, content: str, capability: str | None = None,
+                             staff_id: str | None = None) -> list[dict]:
+    """追加助手消息（explain_result / default_answer 的写入入口，§4#8）。
+    [2.0 上下文策略 1.1] staff_id：条目级身份（审计与一致性校验用），可缺省"""
     messages = list(state.get("messages") or [])
-    messages.append(_new_entry("assistant", content, capability))
+    entry = _new_entry("assistant", content, capability)
+    if staff_id:
+        entry["staff_id"] = staff_id
+    messages.append(entry)
     return messages
 
 

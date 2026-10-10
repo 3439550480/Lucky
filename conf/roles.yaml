@@ -1,0 +1,39 @@
+# ============================================================
+# 角色权限矩阵（2.0 上下文策略 0.3 定稿版）
+# 用户拍板（2026-10-10）：dataquery.hot/sales 合并为 dataquery.query；
+# 热卖排行移出对话能力 → 前端侧边栏固定面板（登录即可见，不占权限点）。
+# 5 权限点：MANAGER 5 / KEEPER 4 / STAFF 3 / TEMP 2
+# 员工权限 = role_codes 各角色权限点的并集（登录时解析一次，存 AuthSession）
+# 校验方式：代码层 staff.has(权限点)，不由模型判断（安全边界）
+# ============================================================
+
+permissions:
+  - name: inventory.read
+    label: 库存查询
+    description: 库存详情、出入库记录查询、库存预警、断码查询
+  - name: inventory.write
+    label: 出入库登记
+    description: 执行入库/出库（走槽位确认流程，写操作）
+  - name: dataquery.query
+    label: 销售数据查询
+    description: 销售额、销量、折扣率、连带率等指标问答
+  - name: replenish.store
+    label: 门店补货建议
+    description: 门店补货计划（含参数明细）
+  - name: replenish.warehouse
+    label: 仓库补货建议
+    description: 向供应商采购建议（本期预留）
+
+roles:
+  - code: MANAGER
+    name: 店长
+    permissions: [inventory.read, inventory.write, dataquery.query, replenish.store, replenish.warehouse]
+  - code: KEEPER
+    name: 库管
+    permissions: [inventory.read, inventory.write, dataquery.query, replenish.store]
+  - code: STAFF
+    name: 普通店员
+    permissions: [inventory.read, inventory.write, dataquery.query]
+  - code: TEMP
+    name: 临时工
+    permissions: [inventory.read, dataquery.query]

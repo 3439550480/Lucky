@@ -13,6 +13,7 @@ from typing import TypedDict
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 
+from app.agent.auth.staff_identity import StaffIdentity
 from app.agent.capabilities.registry import CapabilityRegistry
 from app.agent.usage import LLMUsageTracker
 from app.repositories.es.value_es_repository import ValueESRepository
@@ -59,3 +60,7 @@ class DataAgentContext(TypedDict):
     # [06 文档] 长期记忆存储（retriever 注入与 extractor 落库共用；
     # features.memory.long_term 关闭时节点不消费，字段可缺省——消费方用 .get 容错）
     memory_store: "MemoryStore"
+    # [2.0 上下文策略 0.4] 员工身份 —— 进 Context 不进 State（State 被 checkpointer
+    # 持久化，身份不该留在历史快照里）。节点经 runtime.context["staff"].has(权限点)
+    # 做代码层硬校验；写操作的经办人 = staff.staff_id
+    staff: StaffIdentity

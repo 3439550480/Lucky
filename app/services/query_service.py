@@ -6,6 +6,7 @@
 """
 import json
 
+from app.agent.auth.staff_identity import StaffIdentity
 from app.agent.capabilities.registry import registry
 from app.agent.context import CapabilityHolder, DataAgentContext
 from app.agent.graph import graph
@@ -47,11 +48,13 @@ class QueryService:
         self.memory_store = memory_store
 
     async def query(self, query: str, thread_id: str,
-                    model: str | None = None, capability: str | None = None):
+                    model: str | None = None, capability: str | None = None,
+                    staff: StaffIdentity | None = None):
         """执行一次问数/对话，SSE 流式返回。
 
         - model: 前端选择的 LLM provider（None/非法 → create_llm 内兜底 default）
         - capability: 前端能力芯片显式选择（tier-0；None → 自动路由）
+        - staff: 登录员工身份（鉴权中间件解析；2.0 起必传——登录后全端点受保护）
         """
         # step 1: 请求级计量器 —— provider 名先本地解析（非法值由 create_llm 再兜底一次，
         # 两处一致），model 名取自配置供 03 报告标注
@@ -98,6 +101,7 @@ class QueryService:
             capability_registry=registry,
             usage_tracker=tracker,
             memory_store=self.memory_store,
+            staff=staff,   # [2.0 上下文策略 0.4] 身份进 Context 不进 State
         )
         try:
             # stream_mode="custom" 对应节点内部 writer(...) 写出的进度消息

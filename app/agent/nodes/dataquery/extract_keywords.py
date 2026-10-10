@@ -25,9 +25,11 @@ async def extract_keywords(state: DataAgentState, runtime: Runtime[DataAgentCont
     try:
         query = state["query"]
         # [05 上下文管理] 写入走 context_store（带 capability/ts 元数据）；
-        # 关闭开关时保持旧内联 append 形态（无元数据字段）
+        # [2.0 上下文策略 1.1] 条目级身份 staff_id（鉴权中间件经 Context 注入）
+        staff = runtime.context.get("staff")
         if app_config.features.context_management:
-            messages = append_user_message(state, query, capability=state.get("capability"))
+            messages = append_user_message(state, query, capability=state.get("capability"),
+                                           staff_id=staff.staff_id if staff else None)
         else:
             messages = state.get("messages") or []   # 如果是 None，则初始化为空列表
             messages.append({"role": "user", "content": query})

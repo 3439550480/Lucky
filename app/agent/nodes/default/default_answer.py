@@ -91,8 +91,10 @@ async def default_answer(state: DataAgentState, runtime: Runtime[DataAgentContex
     # [05] 开启开关时走 context_store（带 capability 元数据）
     if app_config.features.context_management:
         cap = state.get("capability") or "default"
-        messages = append_user_message(state, query, capability=cap)
-        messages = append_assistant_message({"messages": messages}, reply, capability=cap)
+        staff = runtime.context.get("staff")
+        sid = staff.staff_id if staff else None
+        messages = append_user_message(state, query, capability=cap, staff_id=sid)
+        messages = append_assistant_message({"messages": messages}, reply, capability=cap, staff_id=sid)
     else:
         messages = list(state.get("messages", []))
         messages.append({"role": "user", "content": query})

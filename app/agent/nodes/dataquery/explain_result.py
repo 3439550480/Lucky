@@ -72,7 +72,9 @@ async def explain_result(state: DataAgentState, runtime: Runtime[DataAgentContex
     # 保存助手消息到历史 —— [05] 写入走 context_store（带 capability 元数据）
     if app_config.features.context_management:
         from app.agent.session.context_store import append_assistant_message
-        messages = append_assistant_message(state, explanation, capability=state.get("capability"))
+        staff = runtime.context.get("staff")
+        messages = append_assistant_message(state, explanation, capability=state.get("capability"),
+                                            staff_id=staff.staff_id if staff else None)
     else:
         messages = state.get("messages", [])
         messages.append({"role": "assistant", "content": explanation})

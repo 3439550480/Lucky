@@ -113,3 +113,7 @@ security:                     # [NEW v1.1] 公网 demo 防护（FR-05；本地�
     enabled: false            # 上线公网时改 true
     soft_limit: 5.0           # 元/天，软上限：告警日志（估算初值，可按实际费用校准）
     hard_limit: 15.0          # 元/天，硬上限：当日暂停对外服务，次日自动恢复
+
+auth:                         # [NEW 2.0] 登录会话（策略 0.2；用户拍板 8h+2h）
+  token_ttl_hours: 8          # 绝对有效期（班次级）
+  idle_timeout_hours: 2       # 闲置超时

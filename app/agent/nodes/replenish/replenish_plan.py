@@ -223,8 +223,10 @@ async def replenish_plan(state: DataAgentState, runtime: Runtime[DataAgentContex
         # 助手消息入历史（与 explain_result 同一套约定）
         if app_config.features.context_management:
             from app.agent.session.context_store import append_assistant_message
+            staff = runtime.context.get("staff")
             messages = append_assistant_message(state, explanation,
-                                                capability=state.get("capability"))
+                                                capability=state.get("capability"),
+                                                staff_id=staff.staff_id if staff else None)
         else:
             messages = list(state.get("messages", []))
             messages.append({"role": "assistant", "content": explanation})
