@@ -88,7 +88,8 @@ export async function fetchHotInsights(): Promise<HotInsight[]> {
   if (!response.ok) {
     throw new Error(`获取热卖排行失败：HTTP ${response.status}`);
   }
-  return (await response.json()) as HotInsight[];
+  const data = (await response.json()) as { items: HotInsight[] };
+  return data.items ?? [];
 }
 
 // 调用 streamQuery 时能传的参数：
