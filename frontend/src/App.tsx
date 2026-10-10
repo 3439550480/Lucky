@@ -11,7 +11,7 @@ import LoginPage from "./components/LoginPage";
 import { MessageBubble } from "./components/MessageBubble";
 import SessionSidebar from "./components/SessionSidebar";
 import ThemeToggle from "./components/ThemeToggle";
-import { streamQuery } from "./lib/agentApi";
+import { confirmFlow, streamQuery } from "./lib/agentApi";
 import {
   AuthExpiredError,
   fetchCapabilities,
@@ -146,6 +146,130 @@ export default function App() {
     });
   }, [messages]);
 
+  // ==== SSE 事件渲染与收尾（/api/query 与 /api/flow/confirm 回包同构，共用一套规则）====
+  const applyEvent = (assistantId: string, event: AgentEvent) => {
+    updateMessages((current) =>
+      current.map((message) => {
+        if (message.id !== assistantId) return message;
+
+        switch (event.type) {
+          case "progress":
+            return {
+              ...message,
+              content: event.status === "running" ? `正在执行：${event.step}` : message.content,
+              steps: upsertStep(message.steps, event),
+            };
+          case "result":
+            return {
+              ...message,
+              status: "done",
+              content: summarizeResult(event.data),
+              result: event.data,
+            };
+          case "explanation":
+            return {
+              ...message,
+              status: "done",
+              explanation: event.text,
+            };
+          case "replenish":
+            // [2.0 S3b] 补货计划：结构化明细入 message，status 等 explanation 事件置 done
+            return {
+              ...message,
+              replenish: event.plan,
+              content: event.total_gap > 0
+                ? `已生成补货计划：${event.scope.length > 0 ? event.scope.join("、") + " " : ""}共 ${event.total_gap} 个缺口 SKU，合计建议补货 ${event.total_suggest_qty} 件`
+                : "当前库存满足覆盖目标，暂无补货缺口。",
+            };
+          case "confirm":
+            // [S3 结构化确认] 确认门：渲染按钮卡片，用户不再需要手打"确认/取消"。
+            // status 必须置 done —— 本轮 SSE 到此收尾（结论由按钮触发的下一轮给出），
+            // 不置 done 会永久停在 streaming 态（finally 只清 controller，不改状态）
+            return {
+              ...message,
+              status: "done",
+              content: event.text,
+              confirm: { action: event.action, slots: event.slots, text: event.text },
+            };
+          default:
+            return {
+              ...message,
+              status: "error",
+              content: "这次查询没有成功。",
+              error: (event as any).message,
+            };
+        }
+      }),
+    );
+  };
+
+  // 流异常收尾：401 回登录页；用户主动停止不算错误；其余展示失败原因
+  const failAssistantMessage = (assistantId: string, error: unknown) => {
+    // [2.0 认证] 401 → 清登录态回登录页（token 已在 agentApi 内清除）
+    if (error instanceof AuthExpiredError) {
+      setStaff(null);
+      updateMessages((current) =>
+        current.map((message) =>
+          message.id === assistantId
+            ? { ...message, status: "done", content: "登录已失效，请重新登录后再试。" }
+            : message,
+        ),
+      );
+      return;
+    }
+    const isAbort = isAbortError(error);
+    updateMessages((current) =>
+      current.map((message) =>
+        message.id === assistantId
+          ? {
+              ...message,
+              status: isAbort ? "done" : "error",
+              content: isAbort ? "已停止本次回答。" : "无法连接服务，请稍后重试。",
+              error: isAbort ? undefined : error instanceof Error ? error.message : String(error),
+            }
+          : message,
+      ),
+    );
+  };
+
+  // [S3 结构化确认] 确认/取消按钮：决定走独立端点（不经自由文本解析），结果作为新的
+  // 一条助手消息流式呈现；原消息内 decided 落定 → 按钮禁用（防重复提交）
+  const handleFlowConfirm = async (message: ChatMessage, decision: "confirm" | "cancel") => {
+    if (isStreaming) return;
+
+    const assistantId = makeId();
+    const assistantMessage: ChatMessage = {
+      id: assistantId,
+      role: "assistant",
+      content: "正在处理...",
+      createdAt: Date.now(),
+      status: "streaming",
+      steps: [],
+    };
+    const controller = new AbortController();
+    setActiveController(controller);
+    updateMessages((current) => [
+      ...current.map((item) =>
+        item.id === message.id && item.confirm
+          ? { ...item, confirm: { ...item.confirm, decided: decision } }
+          : item,
+      ),
+      assistantMessage,
+    ]);
+
+    try {
+      await confirmFlow(decision, {
+        signal: controller.signal,
+        onEvent: (event) => applyEvent(assistantId, event),
+        model: selectedModel || undefined,
+      });
+    } catch (error) {
+      failAssistantMessage(assistantId, error);
+    } finally {
+      setActiveController(null);
+    }
+  };
+
   const startQuery = async (rawQuery = draft) => {
     const query = rawQuery.trim();
     if (!query || isStreaming) return;
@@ -173,51 +297,7 @@ export default function App() {
     touchSession(query);   // 触活会话（首条用户消息生成标题）
     updateMessages((current) => [...current, userMessage, assistantMessage]);
 
-    const onEvent = (event: AgentEvent) => {
-      updateMessages((current) =>
-        current.map((message) => {
-          if (message.id !== assistantId) return message;
-
-          switch (event.type) {
-            case "progress":
-              return {
-                ...message,
-                content: event.status === "running" ? `正在执行：${event.step}` : message.content,
-                steps: upsertStep(message.steps, event),
-              };
-            case "result":
-              return {
-                ...message,
-                status: "done",
-                content: summarizeResult(event.data),
-                result: event.data,
-              };
-            case "explanation":
-              return {
-                ...message,
-                status: "done",
-                explanation: event.text,
-              };
-            case "replenish":
-              // [2.0 S3b] 补货计划：结构化明细入 message，status 等 explanation 事件置 done
-              return {
-                ...message,
-                replenish: event.plan,
-                content: event.total_gap > 0
-                  ? `已生成补货计划：${event.scope.length > 0 ? event.scope.join("、") + " " : ""}共 ${event.total_gap} 个缺口 SKU，合计建议补货 ${event.total_suggest_qty} 件`
-                  : "当前库存满足覆盖目标，暂无补货缺口。",
-              };
-            default:
-              return {
-                ...message,
-                status: "error",
-                content: "这次查询没有成功。",
-                error: (event as any).message,
-              };
-          }
-        }),
-      );
-    };
+    const onEvent = (event: AgentEvent) => applyEvent(assistantId, event);
 
     try {
       await streamQuery(query, {
@@ -227,31 +307,7 @@ export default function App() {
         capability: selectedCapability || undefined,
       });
     } catch (error) {
-      // [2.0 认证] 401 → 清登录态回登录页（token 已在 agentApi 内清除）
-      if (error instanceof AuthExpiredError) {
-        setStaff(null);
-        updateMessages((current) =>
-          current.map((message) =>
-            message.id === assistantId
-              ? { ...message, status: "done", content: "登录已失效，请重新登录后再试。" }
-              : message,
-          ),
-        );
-        return;
-      }
-      const isAbort = isAbortError(error);
-      updateMessages((current) =>
-        current.map((message) =>
-          message.id === assistantId
-            ? {
-                ...message,
-                status: isAbort ? "done" : "error",
-                content: isAbort ? "已停止本次回答。" : "无法连接服务，请稍后重试。",
-                error: isAbort ? undefined : error instanceof Error ? error.message : String(error),
-              }
-            : message,
-        ),
-      );
+      failAssistantMessage(assistantId, error);
     } finally {
       setActiveController(null);
     }
@@ -352,7 +408,11 @@ export default function App() {
             ) : (
               <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6 lg:px-8">
                 {messages.map((message) => (
-                  <MessageBubble key={message.id} message={message} />
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    onFlowConfirm={handleFlowConfirm}
+                  />
                 ))}
               </div>
             )}

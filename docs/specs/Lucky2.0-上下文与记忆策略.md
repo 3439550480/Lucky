@@ -298,7 +298,7 @@ HTTP 请求（带 token）
 | 项 | 值 |
 |----|-----|
 | 登录人 | `S001` 陈明（普通店员 `STAFF`） |
-| 权限 | `inventory.read` `inventory.write` `dataquery.hot` `dataquery.sales` |
+| 权限 | `inventory.read` `inventory.write` `dataquery.query` |
 | 会话 | `thread_id = th_8f2c1a` |
 | 第 1 轮 | 问「昨天店里卖了多少钱」→ 路由到 dataquery → 生成 SQL 执行 → 解释 |
 | **第 2 轮** | 问「**那鞋类呢**」（省略式追问，需继承"昨天/销售额"条件） |
@@ -319,7 +319,7 @@ Body: { "query": "那鞋类呢", "thread_id": "th_8f2c1a" }
 staff_id    = "S001"
 name        = "陈明"
 role_codes  = ["STAFF"]
-permissions = {inventory.read, inventory.write, dataquery.hot, dataquery.sales}
+permissions = {inventory.read, inventory.write, dataquery.query}
 ```
 
 #### 步骤 3 · 组装 State 与 Context
@@ -1551,7 +1551,8 @@ pending_action:
 
 ```
 START → flow_guard ─┬─ pending_action 存在 → 推进流程（不走向数链路）
-                    └─ 不存在 → route_capability → 原链路
+                    ├─ confirm_decision 存在（按钮决定，含失效兜底）→ 推进流程收尾
+                    └─ 都不存在 → route_capability → 原链路
 ```
 
 **理由**：一旦进入流程，优先级最高 —— 不能被其他能力抢走。否则用户在第 3 步回答"42 码"，会被误判成库存查询。
@@ -1575,6 +1576,7 @@ START → flow_guard ─┬─ pending_action 存在 → 推进流程（不走�
 
 ```
 START → flow_guard ─┬─ state["pending_action"] 存在 → flow_step
+                    ├─ state["confirm_decision"] 存在（按钮决定 / 决定失效兜底）→ flow_step
                     └─ 否则 → route_capability（原链路，零改动）
 ```
 
@@ -1582,42 +1584,67 @@ START → flow_guard ─┬─ state["pending_action"] 存在 → flow_step
 
 **推进逻辑（槽位表驱动，单节点）**：
 
+> **2026-10-10 定稿修订（结构化确认）**：确认门由**前端按钮 + 独立端点**
+> `POST /api/flow/confirm` 驱动 —— 决定以结构化字段 `state["confirm_decision"]`
+> （`"confirm"` / `"cancel"`）注入，服务端**不再解析"确认/取消"自由文本**。
+> 原因：子串/整句判定都逃不开自然语言歧义（"不对/对不上"曾命中"对"→ 直接记账），
+> 按钮不给猜测留入口。自由文本判定（`is_confirm`/`is_cancel`）仅作降级兜底保留。
+
 ```python
-SLOTS = {
-    "direction": (parse_direction, validate_direction),
-    "doc_no":    (parse_doc_no,    validate_doc_no),    # 含幂等检查
-    "sku_id":    (parse_sku,       validate_sku),
-    "qty":       (parse_qty,       validate_qty),       # 出库校验可用库存
-}
+SLOTS = ("direction", "doc_no", "sku_id", "qty")
 
 async def flow_step(state, runtime):
-    p = state["pending_action"]
+    p = dict(state.get("pending_action") or {})
     raw = state["query"]
+    decision = state.get("confirm_decision") or ""   # 按钮通道（"" = 本轮无结构化决定）
 
-    # 1) 用本轮输入尽可能多填槽位 —— 不假设顺序，谁空着就试着解析谁
+    # 0) 有决定但没有流程 → 决定已失效（已提交/已取消/超时/重启），明确收尾
+    if decision and not p:
+        writer({"type": "explanation", "text": "没有待确认的出入库操作，请重新发起。"})
+        return {"pending_action": None, "confirm_decision": ""}
+
+    # 1) 确认门：结构化决定优先，自由文本仅兜底（手打"确认"的降级入口）
+    if p.get("awaiting_confirm"):
+        if decision == "cancel" or (not decision and is_cancel(raw)):
+            writer({"type": "explanation", "text": "已取消本次出入库操作。"})
+            return {"pending_action": None, "confirm_decision": ""}
+        if decision != "confirm" and not is_confirm(raw):
+            # 尚未决定 → 推确认卡片事件（前端渲染「确认提交 / 取消」按钮）
+            writer({"type": "confirm", "action": "inventory_write",
+                    "slots": p["slots"], "text": build_confirm_text(p, state)})
+            return {"pending_action": p}
+        result = await write_repo.commit_flow(...)   # 全链路只有此处写库
+        return {"pending_action": None, "confirm_decision": "", "messages": ...}
+
+    # 2) 用本轮输入尽可能多填槽位 —— 不假设顺序，谁空着就试着解析谁
     for name, (parse, _) in SLOTS.items():
         if p["slots"].get(name) is None:
             v = parse(raw)
             if v is not None:
                 p["slots"][name] = v
 
-    # 2) 校验已填槽位（有错就停住，等用户改）
+    # 3) 校验已填槽位（有错就停住，等用户改）
     for name, (_, validate) in SLOTS.items():
         err = validate(p["slots"].get(name), state, runtime)
         if err:
             writer({"type": "explanation", "text": err})
             return {"pending_action": p}
 
-    # 3) 齐全 → 进确认（此时仍不写库）
+    # 4) 齐全 → 推确认卡片（此时仍不写库）
     if all(p["slots"].get(n) is not None for n in SLOTS):
-        writer({"type": "explanation", "text": build_confirm_text(p, state)})
+        writer({"type": "confirm", "action": "inventory_write",
+                "slots": p["slots"], "text": build_confirm_text(p, state)})
         return {"pending_action": {**p, "awaiting_confirm": True}}
 
-    # 4) 不全 → 只问缺的那几个
+    # 5) 不全 → 只问缺的那几个
     missing = [n for n in SLOTS if p["slots"].get(n) is None]
     writer({"type": "explanation", "text": f"还缺：{'、'.join(missing)}"})
     return {"pending_action": p}
 ```
+
+**`confirm_decision` 的两条纪律**（两处都必须遵守，否则会复发误写库）：
+1. 它是**一次性输入**：`QueryService.query()` 每轮显式写 `confirm_decision=""`（否则 checkpoint 恢复上一轮的值，点过一次"确认"会在后续每一轮复发）；
+2. 提交/取消后**必须归零**（`return {..., "confirm_decision": ""}`），同一进程内不残留决定。
 
 **关键差异**：填槽时**遍历全部空缺槽位**（不假设用户按顺序给）—— 所以"一次给全"能一轮就齐，这正是 3.2 修正后的行为。
 
@@ -1625,8 +1652,9 @@ async def flow_step(state, runtime):
 
 ```
 用户：入库 RK2026101001 15262011-01-42 20
-Agent：请确认：入库 / 单据 RK2026101001 / SKU 15262011-01-42 / 20 件 / 经办人 M001 —— 确认提交？
-用户：确认
+Agent：【确认卡片】入库 / 单据 RK2026101001 / SKU 15262011-01-42 / 20 件 / 经办人 M001
+       按钮：［确认提交］［取消］
+用户：（点「确认提交」→ POST /api/flow/confirm  {decision: "confirm"}）
 Agent：✅ 已入库 20 件，该 SKU 当前可用库存 35 件。
 ```
 
@@ -1634,7 +1662,8 @@ Agent：✅ 已入库 20 件，该 SKU 当前可用库存 35 件。
 
 | 情况 | 处理 |
 |------|------|
-| 用户说"取消 / 算了 / 不弄了" | 清空 `pending_action`，回到正常路由，提示"已取消" |
+| 点「确认提交」按钮（或手打"确认"作为降级兜底） | `commit_flow` 事务写库（含幂等复查）→ 清空 `pending_action` 与 `confirm_decision` |
+| 点「取消」按钮（或手打"取消 / 算了 / 不弄了"） | 清空 `pending_action` 并由 `flow_step` 收尾（**不落回能力路由**——否则会对"取消"二字再生成一段无关回答），提示"已取消" |
 | `started_at` 超时（建议 10 分钟） | 清空并在下次输入时提示"上次的操作已超时，请重新开始" |
 | 任意步骤校验失败 | **停在原步**重问，已填槽位保留 |
 

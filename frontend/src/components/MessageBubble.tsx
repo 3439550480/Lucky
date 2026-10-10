@@ -4,13 +4,21 @@
  * 解释文本走 Markdown 渲染（GFM + 代码高亮，双主题适配）
  */
 import { Bot, Copy, UserRound } from "lucide-react";
+import { ConfirmCard } from "./ConfirmCard";
 import { Markdown } from "./Markdown";
 import { ResultTable } from "./ResultTable";
 import { StepRail } from "./StepRail";
 import { cn, formatTime, toClipboardText } from "../lib/format";
 import type { ChatMessage } from "../types/agent";
 
-export function MessageBubble({ message }: { message: ChatMessage }) {
+export function MessageBubble({
+  message,
+  onFlowConfirm,
+}: {
+  message: ChatMessage;
+  // [S3 结构化确认] 按钮点击 → 提交结构化决定（缺省则不渲染按钮，如只读预览场景）
+  onFlowConfirm?: (message: ChatMessage, decision: "confirm" | "cancel") => void;
+}) {
   const isUser = message.role === "user";
 
   const copy = async () => {
@@ -63,6 +71,13 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
             </div>
           )}
           {!isUser && message.result !== undefined && <ResultTable data={message.result} />}
+          {!isUser && message.confirm && (
+            <ConfirmCard
+              request={message.confirm}
+              disabled={message.confirm.decided !== undefined}
+              onDecide={(decision) => onFlowConfirm?.(message, decision)}
+            />
+          )}
           {!isUser && message.replenish && (
             <div className="mt-3">
               <p className="mb-1 text-xs font-semibold text-muted">补货建议（按断货紧急度排序）</p>

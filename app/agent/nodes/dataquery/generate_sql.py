@@ -66,6 +66,9 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
                 except Exception as e:
                     logger.warning(f"[memory] 记忆注入失败（跳过）: {e}")
         else:
+            # [2.0 P0 修复留档] 原版此分支算出 history_yaml 却从未使用，且 chain_input
+            # 仍无条件注入 inherited_conditions → 关开关即 NameError，基线组跑不起来。
+            # 基线语义：忠实复现"策略生效前"的输入（最近 10 条原文，元数据不剥离）
             history_yaml = yaml.dump(
                 (state.get("messages") or [])[-10:], allow_unicode=True, sort_keys=False)
             template = load_prompt("legacy/generate_sql")
@@ -78,6 +81,7 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
         output_parser = StrOutputParser()
         chain = prompt | llm | output_parser
 
+        # step 1: 公共上下文（两分支共用；与占位符一一对应——多传无害、少传必崩）
         chain_input = {
             # YAML 更适合放进提示词：保留嵌套结构 顺序和中文说明，方便模型理解表字段关系
             "table_infos": yaml.dump(
@@ -89,12 +93,16 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
             "date_info": yaml.dump(date_info, allow_unicode=True, sort_keys=False),
             "db_info": yaml.dump(db_info, allow_unicode=True, sort_keys=False),
             "query": query,
-            "inherited_conditions": inherited,
-            "memory_block": memory_block,
         }
+        # step 2: 分支专属占位符按开关注入（修复点）——开关开的组：三区前缀 + 继承条件块
+        # + 记忆块；开关关的组：legacy 模板要的对话历史原文
         if app_config.features.context_management:
             from app.agent.session.prefix import build_system_prefix
             chain_input["system_prefix"] = build_system_prefix(runtime.context.get("staff"))
+            chain_input["inherited_conditions"] = inherited
+            chain_input["memory_block"] = memory_block
+        else:
+            chain_input["conversation_history"] = history_yaml
 
         result = await chain.ainvoke(chain_input)
         logger.info(f"生成的SQL：{result}")

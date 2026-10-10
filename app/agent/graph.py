@@ -88,6 +88,11 @@ graph_builder.add_edge(START, "flow_guard")
 def route_after_guard(state: DataAgentState) -> str:
     if state.get("permission_denied"):
         return "permission_denied"
+    # [S3 结构化确认] 前端按钮决定直达流程节点：既有"流程进行中"的正常情形，
+    # 也覆盖"决定已失效（已提交/已取消/超时/重启）"——交给 flow_step 明确收尾，
+    # 避免掉进能力路由对"确认"二字做语义猜测
+    if state.get("confirm_decision"):
+        return "flow_step"
     if state.get("pending_action"):
         return "flow_step"
     return "route_capability"

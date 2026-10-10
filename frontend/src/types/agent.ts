@@ -75,18 +75,37 @@ export type ReplenishEvent = {
   capability?: string;
 };
 
+// [S3 结构化确认] 出入库确认门事件：前端渲染「确认提交 / 取消」按钮卡片，
+// 点击走独立端点 POST /api/flow/confirm —— 服务端不再解析"确认/取消"自由文本
+export type ConfirmEvent = {
+  type: "confirm";
+  action: string;                          // 待确认动作（v1: inventory_write）
+  slots: Record<string, string | number>;  // 槽位快照（direction/doc_no/sku_id/qty）
+  text: string;                            // 摘要文案（前端写入 content，卡片只渲染按钮）
+  capability?: string;
+};
+
 export type AgentEvent =
   | ProgressEvent
   | ResultEvent
   | ErrorEvent
   | ExplanationEvent
-  | ReplenishEvent;
+  | ReplenishEvent
+  | ConfirmEvent;
 
 
 export type StepState = {
   step: string;
   status: ProgressStatus;
   updatedAt: number;
+};
+
+// [S3 结构化确认] 挂在助手消息上的"待确认动作"（confirm 事件写入）
+export type ConfirmRequest = {
+  action: string;
+  slots: Record<string, string | number>;
+  text: string;
+  decided?: "confirm" | "cancel";  // 点击后置位 → 按钮禁用（防重复提交）
 };
 
 export type ChatMessage = {
@@ -98,6 +117,7 @@ export type ChatMessage = {
   steps?: StepState[];
   result?: unknown;
   replenish?: ReplenishRow[]; // [2.0 S3b] 补货计划明细（replenish 事件写入）
+  confirm?: ConfirmRequest;   // [S3] 待确认动作（点击后 decided 置位）
   explanation?: string;     // 助手消息的解释文本
   error?: string;
 };

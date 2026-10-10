@@ -4,6 +4,14 @@
 > 定稿日期：2026-10-09
 > 适用范围：**单店版**（一家奥莱特卖店）
 > 说明：本文档中的角色职责与权限矩阵由业务方（用户）确认；年龄、数字化水平等未提供的细节标注为「待确认假设」，不含任何编造的调研数据。
+>
+> **⚠️ 修订（2026-10-10，项目所有者拍板 · 以《Lucky2.0-上下文与记忆策略》0.3 节为准）**：
+> `dataquery.hot` 与 `dataquery.sales` **合并为 `dataquery.query`**，热卖排行移出对话能力、
+> 改为前端侧边栏固定面板（登录即可见，不占权限点），**权限校验全部落在能力级**（权限点 6 → 5）。
+> 因此本文档下述三处**已被修订覆盖**，阅读时以修订为准（正文已同步更新，保留修订说明用于追溯）：
+> 1. §2.4 临时工「看不到销售额度」→ **临时工可用 `dataquery.query`**（销售额问答不再拒绝），仍不可出入库、不可补货；
+> 2. §3 权限矩阵 / §3.1「dataquery 能力内部再分权限」→ 权限下沉到能力级，`dataquery` 内部不再细分；
+> 3. §5.4 / §5.6 的 6 权限点与 YAML 片段 → 5 权限点，落地文件为 `conf/roles.yaml`。
 
 ---
 
@@ -121,8 +129,8 @@
 | 典型痛点 | 不熟悉货品与系统；问同事又怕显得不专业 | 推断 |
 | 数字化水平 | 【待确认假设】手机熟练，对本店业务一无所知 | 假设 |
 | 使用频率 | 中频（当班期间） | 推断 |
-| 可用能力 | **仅**库存查询 + 热卖排行（**看不到销售额度**，**不能出入库**） | 用户确认 |
-| 权限最小化理由 | 流动大、不熟悉 → 给最小可用权限，防止误操作与经营数据外泄 | 设计意图 |
+| 可用能力 | 库存查询 + 销售数据查询（**不能出入库**、**不能补货**）；热卖排行走前端侧边栏面板 | 用户确认 · 2026-10-10 修订 |
+| 权限最小化理由 | 流动大、不熟悉 → 给最小可用权限，防止**误写库存**与补货建议误用 | 设计意图 |
 
 **用户故事**
 
@@ -131,9 +139,13 @@
 以便【能独立应对顾客提问，不必反复求助老员工】
 
 验收标准（Given/When/Then）：
-- Given 临时工已登录（最小权限）
-  When 临时工尝试查询销售额度
-  Then 系统拒绝并提示"当前账号无此权限，请联系店长"
+- Given 临时工已登录（`inventory.read` + `dataquery.query`）
+  When 临时工提问「昨天卖了多少钱」（销售额问答）
+  Then **正常返回**销售数据 —— 销售数据查询对临时工开放（2026-10-10 拍板：
+    dataquery.hot/sales 合并为 dataquery.query，不在能力内做语义细分）
+- Given 临时工已登录
+  When 临时工要求「出库 5 件 15262011-01-42」
+  Then 系统拒绝并提示"当前账号无此权限，请联系店长"（`inventory.write` 缺失）
 ```
 
 ---
@@ -146,23 +158,28 @@
 |--------------|:-----:|:-------:|:----:|:----:|
 | 库存查询（读） | ✅ | ✅ | ✅ | ✅ |
 | **出入库（写）** | ❌ | ✅ | ✅ | ✅ |
-| 热卖排行 | ✅ | ✅ | ✅ | ✅ |
-| 销售额度统计 | ❌ | ✅ | ✅ | ✅ |
+| 销售数据查询（销售额/销量/折扣率） | ✅ | ✅ | ✅ | ✅ |
 | 门店补货建议 | ❌ | ❌ | ✅ | ✅ |
 | 仓库补货建议（预留） | ❌ | ❌ | ❌ | ✅ |
+| 热卖排行（前端侧边栏面板） | ✅ | ✅ | ✅ | ✅ |
 
-### 3.1 关键设计结论：能力 ≠ 权限
+> **2026-10-10 修订**：热卖排行不再走对话能力（移入前端侧边栏固定面板，登录即可见，**不占权限点**）；
+> 原「销售额度统计」一行并入「销售数据查询」，对临时工**开放**。
 
-**`dataquery` 能力内部需要再分权限** —— 热卖排行对全员开放，销售额度对临时工关闭。
+### 3.1 关键设计结论：权限下沉到能力级
 
-这意味着权限控制**不能只挂在"能力"这一层**，必须下沉到**子功能粒度**。落地时每个子功能需带权限标记，路由/执行层按当前登录角色校验。
+**修订后的结论**：`dataquery` 作为**一个能力对应一个权限点**（`dataquery.query`），能力内部**不再**做子功能细分。
+
+原因：在 Text2SQL 能力内按"问的是销售额还是热卖"做语义细分，误判成本（该放行的被拒 / 该拒的被放行）高于收益，且校验点会被迫放进模型/IP 判定链路；改为**能力级权限**后，校验只看 `staff.has(...)`，零歧义。
+
+这意味着权限控制挂在**能力这一层**（`inventory.read` / `inventory.write` / `dataquery.query` / `replenish.store` / `replenish.warehouse`），由路由出口按能力判定，不经模型。
 
 ### 3.2 角色能力的增量关系
 
 | 角色 | 相对上一级新增 |
 |------|--------------|
-| 临时工 | 库存查询（读）+ 热卖排行 |
-| 普通店员 | + 出入库（写）+ 销售额度 |
+| 临时工 | 库存查询（读）+ 销售数据查询 |
+| 普通店员 | + 出入库（写） |
 | 库管 | + 门店补货建议 |
 | 店长 | + 仓库补货建议（预留） |
 
@@ -246,21 +263,22 @@
 
 | 角色码 | 角色 | 权限点集合 |
 |--------|------|-----------|
-| `MANAGER` | 店长 | `inventory.read` · `inventory.write` · `dataquery.hot` · `dataquery.sales` · `replenish.store` · `replenish.warehouse`（预留） |
-| `KEEPER` | 库管 | `inventory.read` · `inventory.write` · `dataquery.hot` · `dataquery.sales` · `replenish.store` |
-| `STAFF` | 普通店员 | `inventory.read` · `inventory.write` · `dataquery.hot` · `dataquery.sales` |
-| `TEMP` | 临时工 | `inventory.read` · `dataquery.hot` |
+| `MANAGER` | 店长 | `inventory.read` · `inventory.write` · `dataquery.query` · `replenish.store` · `replenish.warehouse`（预留） |
+| `KEEPER` | 库管 | `inventory.read` · `inventory.write` · `dataquery.query` · `replenish.store` |
+| `STAFF` | 普通店员 | `inventory.read` · `inventory.write` · `dataquery.query` |
+| `TEMP` | 临时工 | `inventory.read` · `dataquery.query` |
 
-**权限点定义（6 个，下沉到子功能粒度 —— 落实"能力 ≠ 权限"）：**
+**权限点定义（5 个，能力级粒度 —— 2026-10-10 定稿）：**
 
 | 权限点 | 覆盖的子功能 |
 |--------|-------------|
 | `inventory.read` | 库存详情、出入库记录查询、库存预警、断码查询 |
 | `inventory.write` | 出入库登记（**写操作**） |
-| `dataquery.hot` | 热卖排行 |
-| `dataquery.sales` | 销售额度统计 |
+| `dataquery.query` | 销售数据查询（销售额、销量、折扣率、连带率等指标问答） |
 | `replenish.store` | 门店补货建议 |
 | `replenish.warehouse` | 仓库补货建议（预留） |
+
+> 热卖排行不在权限点内：它已移入**前端侧边栏固定面板**（固定 SQL，登录即可见）。
 
 ### 5.5 角色叠加的表达（已确认）
 
@@ -277,22 +295,21 @@
 **存在配置文件，不建数据库表。** 形态示例：
 
 ```yaml
+permissions:
+  - { name: inventory.read,       label: 库存查询 }
+  - { name: inventory.write,      label: 出入库登记 }
+  - { name: dataquery.query,      label: 销售数据查询 }
+  - { name: replenish.store,      label: 门店补货建议 }
+  - { name: replenish.warehouse,  label: 仓库补货建议 }
+
 roles:
-  MANAGER:
-    name: 店长
-    permissions: [inventory.read, inventory.write, dataquery.hot,
-                  dataquery.sales, replenish.store, replenish.warehouse]
-  KEEPER:
-    name: 库管
-    permissions: [inventory.read, inventory.write, dataquery.hot,
-                  dataquery.sales, replenish.store]
-  STAFF:
-    name: 普通店员
-    permissions: [inventory.read, inventory.write, dataquery.hot, dataquery.sales]
-  TEMP:
-    name: 临时工
-    permissions: [inventory.read, dataquery.hot]
+  - { code: MANAGER, name: 店长,     permissions: [inventory.read, inventory.write, dataquery.query, replenish.store, replenish.warehouse] }
+  - { code: KEEPER,  name: 库管,     permissions: [inventory.read, inventory.write, dataquery.query, replenish.store] }
+  - { code: STAFF,   name: 普通店员, permissions: [inventory.read, inventory.write, dataquery.query] }
+  - { code: TEMP,    name: 临时工,   permissions: [inventory.read, dataquery.query] }
 ```
+
+> 以上为 `conf/roles.yaml` 的**简化形态**（真实文件含 `description` 字段），两者权限口径一致。
 
 改权限**只改此文件**，不动表结构、不动代码。
 
@@ -351,7 +368,7 @@ roles:
 | 全权限（含仓库补货预留） | `M001` |
 | **角色叠加**（库管 = 店员 + 补货） | `K001` |
 | 可出入库、不可补货 | `S001`–`S006` |
-| **最小权限**（库存 + 热卖，无销售额度） | `T001`–`T004` |
+| **最小权限**（库存查询 + 销售数据查询，无出入库/补货） | `T001`–`T004` |
 | 离职账号登录被拒 | `S007` |
 | 临时工有效期满登录被拒 | `T005` |
 

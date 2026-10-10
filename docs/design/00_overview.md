@@ -144,6 +144,11 @@ graph TD
 - 请求：`POST /api/query`，`Content-Type: application/json`，`Accept: text/event-stream`
   - 请求体（现状）：`{"query": string, "thread_id": string}`
   - 请求体（编码阶段扩展）：增加 `"model": string`（见 02 文档）
+- 请求（2.0 新增）：`POST /api/flow/confirm` —— 出入库确认门的**结构化决定**入口
+  - 请求体：`{"thread_id": string, "decision": "confirm" | "cancel", "model"?: string}`
+  - 响应：与 `/api/query` **同构**的 SSE（前端复用同一套解析与渲染）
+  - 与 `/api/query` 的差异：没有自由文本进入判定环节（不进 LLM、不进正则），
+    决定由按钮产生；无 `inventory.write` 权限 → `403`（不经 SSE）
 - 响应：`Content-Type: text/event-stream`，长连接流式输出
 - **帧格式**：每条事件一个 SSE 帧——`data: ` 前缀 + JSON 文本 + 空行结尾：
 
@@ -161,6 +166,8 @@ data: {"type": "progress", "step": "执行SQL", "status": "running"}\n\n
 | `progress` | 步骤执行进度 | `step: string`（中文步骤名，如"理解用户意图"/"执行SQL"）、`status: "running" \| "success" \| "error"` | 各节点 `runtime.stream_writer` |
 | `result` | 查询结果数据 | `data: unknown`（run_sql 的执行结果，结构化行列数据） | run_sql 节点 |
 | `explanation` | 结果的自然语言解释 | `text: string` | explain_result 节点 |
+| `replenish` | 补货计划明细（2.0 新增） | `plan`（SKU × 门店/仓库矩阵）、`scope`、`total_gap`、`total_suggest_qty` | replenish 节点 |
+| `confirm` | 出入库待确认动作（2.0 新增） | `action: string`、`slots`（direction/doc_no/sku_id/qty 快照）、`text`（摘要） | flow_step 节点 |
 | `error` | 错误（流程失败或未捕获异常） | `message: string` | fail 节点 / QueryService 异常兜底 |
 
 示例帧：
@@ -174,8 +181,14 @@ data: {"type": "result", "data": {"columns": ["region", "gmv"], "rows": [["华�
 
 data: {"type": "explanation", "text": "华北地区 GMV 为 12.35 万元。"}
 
+data: {"type": "confirm", "action": "inventory_write", "slots": {"direction": "out", "doc_no": "XS2026101001", "sku_id": "15262011-01-42", "qty": 20}, "text": "出库 20 件 / 经办人 王芳（S001）—— 确认提交？"}
+
 data: {"type": "error", "message": "SQL 执行超时"}
 ```
+
+> `confirm` 事件是**出入库确认门**的唯一交互入口（渲染为「确认提交 / 取消」按钮卡片）。
+> 前端点击后调 `POST /api/flow/confirm` 回传结构化决定；服务端**不解析**"确认/取消"文本
+> （手打文本仅作降级兜底）。收到 `confirm` 事件即代表本轮 SSE 结束（前端把该条消息置为终态）。
 
 > 注：`result.data` 的内部结构目前由仓储层返回值决定（`unknown`），编码阶段在 03/04 文档中收敛为明确的行列结构定义。
 

@@ -190,6 +190,41 @@ export async function streamQuery(query: string, options: QueryOptions) {
     throw new Error(`接口请求失败：HTTP ${response.status}`);
   }
 
+  await consumeSse(response, options.onEvent);
+}
+
+// [S3 结构化确认] 确认/取消按钮 → 独立端点：决定以结构化字段提交（只有两个合法值），
+// 服务端不再解析"确认/取消"自由文本。回包与 /api/query 同构，复用同一套读取/解析逻辑
+export async function confirmFlow(decision: "confirm" | "cancel", options: QueryOptions) {
+  const payload: Record<string, unknown> = { thread_id: getThreadId(), decision };
+  if (options.model) payload.model = options.model;
+
+  const response = await fetch(`${API_BASE_URL}/api/flow/confirm`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      ...authHeaders(),
+    },
+    body: JSON.stringify(payload),
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      setToken(null);
+      throw new AuthExpiredError("登录已失效，请重新登录");
+    }
+    // 403（无出入库权限 / 会话属于他人）等：后端 detail 更准确，透传给气泡
+    const body = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(body?.detail ?? `确认失败：HTTP ${response.status}`);
+  }
+
+  await consumeSse(response, options.onEvent);
+}
+
+// SSE 帧读取与解析（/api/query 与 /api/flow/confirm 共用同一实现）
+async function consumeSse(response: Response, onEvent: (event: AgentEvent) => void) {
   if (!response.body) {
     throw new Error("浏览器未返回可读取的流式响应。");
   }
@@ -214,7 +249,7 @@ export async function streamQuery(query: string, options: QueryOptions) {
       for (const chunk of chunks) {
         const event = parseSseChunk(chunk);
         if (event) {
-          options.onEvent(event);
+          onEvent(event);
         }
       }
     }
@@ -223,7 +258,7 @@ export async function streamQuery(query: string, options: QueryOptions) {
     buffer += decoder.decode();
     const tail = parseSseChunk(buffer);
     if (tail) {
-      options.onEvent(tail);
+      onEvent(tail);
     }
   } finally {
     reader.releaseLock();

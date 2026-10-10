@@ -106,6 +106,10 @@ class DataAgentState(TypedDict):
     # "回忆"——可测、可恢复、不幻觉。slots 字典而非 step 步骤号：填充顺序不固定，
     # "一次能填多少填多少"（策略 3.2）。None = 无进行中的流程
     pending_action: dict  # {type, slots:{direction,doc_no,sku_id,qty}, started_at, awaiting_confirm}
+    # [S3 结构化确认] 确认门的可信输入通道（"confirm"/"cancel"/None）——由独立端点
+    # POST /api/flow/confirm 写入（前端确认/取消按钮点击产生，服务端不再解析自由文本）；
+    # flow_step 优先采信它，None = 非按钮触发 → 退化为文本兜底（is_confirm/is_cancel）
+    confirm_decision: str
 
     # ==== 2.0 新能力字段（replenish）====
     # [规则3 留档] S3b 设计拍板：inventory 复用问数链路（结果走 result 字段，不设

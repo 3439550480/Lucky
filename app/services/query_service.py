@@ -51,12 +51,15 @@ class QueryService:
 
     async def query(self, query: str, thread_id: str,
                     model: str | None = None, capability: str | None = None,
-                    staff: StaffIdentity | None = None):
+                    staff: StaffIdentity | None = None,
+                    confirm_decision: str = ""):
         """执行一次问数/对话，SSE 流式返回。
 
         - model: 前端选择的 LLM provider（None/非法 → create_llm 内兜底 default）
         - capability: 前端能力芯片显式选择（tier-0；None → 自动路由）
         - staff: 登录员工身份（鉴权中间件解析；2.0 起必传——登录后全端点受保护）
+        - confirm_decision: [S3 结构化确认] 出入库确认门决定（"confirm"/"cancel"）。
+          只由 confirm() 传入；空串 = 普通对话轮（字段必须显式归零，理由见下方 state 注释）
         """
         # step 1: 请求级计量器 —— provider 名先本地解析（非法值由 create_llm 再兜底一次，
         # 两处一致），model 名取自配置供 03 报告标注
@@ -89,6 +92,16 @@ class QueryService:
             capability="",
             capability_source="",
             tool_calls=[],
+            # [S3 结构化确认] 决定是一次性输入，必须显式归零：checkpoint 会恢复上一轮的值，
+            # 若本轮不覆盖，上一次点过的"确认"会在后续每一轮里复发（确认门被反复触发）
+            confirm_decision=confirm_decision,
+            # [final-verify 修复] 一次性路由标记同样必须显式归零：checkpointer 会恢复上一轮的
+            # permission_denied / denied_permission，而 route_after_guard 会据此把本轮直接短路
+            # 到权限拒绝终点（能力链路完全不进）。复现：TEMP 先试"入库…"被拒 → 同会话再问
+            # "生成鞋类的补货计划"，补货请求被上一轮的「出入库登记」拒绝文案劫持（新会话单发
+            # 则正确判为「门店补货建议」）。同确认门一个缺陷类：一次性输入 = 入口清残留
+            permission_denied=False,
+            denied_permission="",
         )
         holder = CapabilityHolder()                                  # [04] 每请求新建（防串话）
         # [2.0 P0 修复] memory_store 接线：此前漏传 → 记忆检索恒空串（读路径断裂）
@@ -164,3 +177,16 @@ class QueryService:
                     )
                 except Exception as e:
                     logger.warning(f"[memory] 记忆提取异常（不影响主链路）: {e}")
+
+    def confirm(self, thread_id: str, decision: str,
+                model: str | None = None, staff: StaffIdentity | None = None):
+        """[S3 结构化确认] 前端"确认/取消"按钮 → 独立端点：把可信决定注入 state，
+        驱动 flow_step 的确认门（服务端不再解析自由文本，误写库失去入口）。
+
+        - decision: "confirm" | "cancel"（端点层已用 Literal 白名单校验，此处不重复判定）
+        - 返回与 query() 同构的 SSE 异步生成器；本方法刻意不是 async —— 直接把生成器
+          交给 StreamingResponse，多包一层协程反而要 await（且无法再流式）
+        - query 文本按按钮语义填（"确认"/"取消"）：轨迹、记忆提取与文本兜底判定口径一致
+        """
+        return self.query("确认" if decision == "confirm" else "取消", thread_id,
+                          model=model, staff=staff, confirm_decision=decision)
