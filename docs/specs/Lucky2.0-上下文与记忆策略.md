@@ -88,42 +88,48 @@
 
 ### 0.3 `role` 与 `permission` 的具体内容
 
+> **✅ 定稿修订（2026-10-10，项目所有者拍板）**：`dataquery.hot` 与 `dataquery.sales` **合并为
+> `dataquery.query`**——理由：为 TEMP 在 Text2SQL 能力内做语义细分的误判成本高于收益；
+> **热卖排行移出对话能力**，改为前端侧边栏固定面板（`GET /api/insights/hot` 固定 SQL，
+> 登录即可见，不占权限点）。权限校验全部落在**能力级**，零歧义。权限点 6 → 5。
+
 **角色码（4 个）** —— 来自 `dim_staff.role_codes`（多值，逗号分隔）：
 
 | 角色码 | 中文 | 权限点数量 |
 |--------|------|:---------:|
-| `MANAGER` | 店长 | 6 |
-| `KEEPER` | 库管 | 5 |
-| `STAFF` | 普通店员 | 4 |
+| `MANAGER` | 店长 | 5 |
+| `KEEPER` | 库管 | 4 |
+| `STAFF` | 普通店员 | 3 |
 | `TEMP` | 临时工 | 2 |
 
-**权限点（6 个）** —— 下沉到子功能粒度：
+**权限点（5 个）** —— 能力级粒度：
 
 | 权限点 | 中文 | 覆盖的具体子功能 |
 |--------|------|-----------------|
 | `inventory.read` | 库存查询 | 库存详情、出入库记录查询、库存预警、断码查询 |
-| `inventory.write` | 出入库登记 | **写操作**：执行入库/出库 |
-| `dataquery.hot` | 热卖排行 | 商品热卖程度剖析（畅销/滞销榜） |
-| `dataquery.sales` | 销售额度 | 销售额统计、同比环比、品类分布 |
-| `replenish.store` | 门店补货 | 门店补货建议（含参数明细） |
-| `replenish.warehouse` | 仓库补货 | 向供应商采购建议（**本期预留**） |
+| `inventory.write` | 出入库登记 | **写操作**：执行入库/出库（槽位流程） |
+| `dataquery.query` | 销售数据查询 | 销售额、销量、折扣率、连带率等指标问答 |
+| `replenish.store` | 门店补货建议 | 门店补货计划（含参数明细） |
+| `replenish.warehouse` | 仓库补货建议 | 向供应商采购建议（**本期预留**） |
 
 **角色 → 权限映射**（存放于 `conf/roles.yaml`，改配置不改代码）：
 
-| 角色码 | inventory.read | inventory.write | dataquery.hot | dataquery.sales | replenish.store | replenish.warehouse |
-|--------|:---:|:---:|:---:|:---:|:---:|:---:|
-| `MANAGER` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `KEEPER` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| `STAFF` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| `TEMP` | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| 角色码 | inventory.read | inventory.write | dataquery.query | replenish.store | replenish.warehouse |
+|--------|:---:|:---:|:---:|:---:|:---:|
+| `MANAGER` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `KEEPER` | ✅ | ✅ | ✅ | ✅ | ❌ |
+| `STAFF` | ✅ | ✅ | ✅ | ❌ | ❌ |
+| `TEMP` | ✅ | ❌ | ✅ | ❌ | ❌ |
 
 **解析规则**：
 
 - 一个员工的权限 = 其 `role_codes` 中**每个角色权限点的并集**
-- 例：`STAFF,KEEPER` → `{inventory.read, inventory.write, dataquery.hot, dataquery.sales} ∪ {…, replenish.store}` = 库管全部 5 个权限
+- 例：`STAFF,KEEPER`（库管李慧）→ `{inventory.read, inventory.write, dataquery.query} ∪ {…, replenish.store}` = 库管全部 4 个权限
 - **解析时机**：登录时解析一次，结果存入 AuthSession（角色属低频变更）
 
 **校验方式**：代码层字符串判定 `staff.has("inventory.write")`，**不由模型判断**。
+校验位置：**路由出口按能力判定**（`_CAPABILITY_PERM` 映射）——inventory 与 dataquery 共用
+问数入口，校验在路由层分别进行，不需要能力内识别；拒绝经 `permission_denied` 终点节点。
 
 ---
 

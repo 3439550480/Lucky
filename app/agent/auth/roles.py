@@ -59,6 +59,15 @@ class RoleRegistry:
         role = self.roles.get(code)
         return role.name if role else code
 
+    def display_role_name(self, role_codes: list[str]) -> str:
+        """多角色员工的主显示名：取权限最多的角色（如 K001 [STAFF,KEEPER] → 库管）"""
+        best = None
+        for code in role_codes or []:
+            role = self.roles.get(code)
+            if role and (best is None or len(role.permissions) > len(best.permissions)):
+                best = role
+        return best.name if best else "员工"
+
     def render_role_block(self, permissions: frozenset[str]) -> str:
         """前缀【当前用户】段的可执行/不可执行两行文本（策略 1.2：进前缀区，按角色 4 份分裂）"""
         allowed = [self.permissions[p].label for p in self._order if p in permissions]

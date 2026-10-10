@@ -88,8 +88,13 @@ class DataAgentState(TypedDict):
     # ==== 能力路由字段（04 文档 §3.5）====
     requested_capability: str  # 前端芯片显式选择（tier-0 输入；空串 = 自动路由）
     capability: str            # 路由选中的能力名（v1: dataquery|default）
-    capability_source: str     # 路由来源 user/rules/embedding/llm/fallback（03 评估过滤用）
+    capability_source: str     # 路由来源 user/rules/embedding/llm/fallback/denied（03 评估过滤用）
     tool_calls: list[str]      # v1 由路由写入（03 tool_metrics 数据源；映射见 router._TOOL_MAP）
+    # ==== 权限拒绝（2.0 上下文策略 1.4）====
+    # [规则3 留档] 首版漏声明这两个字段——LangGraph 合并时丢弃 schema 外字段，
+    # 导致拒绝标记丢失、分发仍走到能力链路（冒烟抓出）。字段必须在 State 显式声明
+    permission_denied: bool    # 路由层权限校验未通过 → 分发到 permission_denied 终点
+    denied_permission: str     # 被拒的权限点（deny 节点渲染用，不透给用户）
 
     # ==== 2.0 新能力字段（replenish）====
     # [规则3 留档] S3b 设计拍板：inventory 复用问数链路（结果走 result 字段，不设

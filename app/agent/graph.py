@@ -68,10 +68,12 @@ graph_builder.add_node("run_sql", run_sql)
 graph_builder.add_node("explain_result", explain_result)
 graph_builder.add_node("fail", fail)
 
-# ---- 注册节点：能力路由 + default + replenish（2.0 S3b）----
+# ---- 注册节点：能力路由 + default + replenish + 权限拒绝（2.0）----
+from app.agent.nodes.common.permission_denied import permission_denied
 graph_builder.add_node("route_capability", route_capability)
 graph_builder.add_node("default_answer", default_answer)
 graph_builder.add_node("replenish_plan", replenish_plan)   # 补货计划（固化算法单节点）
+graph_builder.add_node("permission_denied", permission_denied)  # 权限拒绝终点（1.4）
 
 # ---- 注册表 fail-fast 校验：能力 entry / routing 兜底必须指向已注册节点（04 §2.2）----
 registry.validate_entries(set(graph_builder.nodes))
@@ -82,22 +84,27 @@ graph_builder.add_edge(START, "route_capability")
 
 def route_by_capability(state: DataAgentState) -> str:
     """按路由选中的能力分发到其 entry。
+    [2.0 上下文策略 1.4] 权限拒绝优先——分发到 permission_denied 终点节点。
     path_map 由 registry 动态构建 —— 新增能力零路由改动（04 文档核心承诺）"""
+    if state.get("permission_denied"):
+        return "permission_denied"
     capability = state.get("capability") or registry.default_capability
     cap = registry.capabilities.get(capability) or registry.capabilities[registry.default_capability]
     return cap.entry
 
 
 path_map = {cap.entry: cap.entry for cap in registry.capabilities.values()}
+path_map["permission_denied"] = "permission_denied"
 graph_builder.add_conditional_edges(
     source="route_capability",
     path=route_by_capability,
     path_map=path_map,
 )
 
-# default / replenish 能力：回答即终点
+# default / replenish / 权限拒绝：回答即终点
 graph_builder.add_edge("default_answer", END)
 graph_builder.add_edge("replenish_plan", END)
+graph_builder.add_edge("permission_denied", END)
 
 # ---- 问数链路边（原样保留）----
 # 抽取关键词后，三路召回并行扇出

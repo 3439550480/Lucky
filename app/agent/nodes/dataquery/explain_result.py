@@ -44,7 +44,7 @@ async def explain_result(state: DataAgentState, runtime: Runtime[DataAgentContex
         )
         chain = prompt | llm | StrOutputParser()
         explanation = await chain.ainvoke({
-            "system_prefix": build_system_prefix(),
+            "system_prefix": build_system_prefix(runtime.context.get("staff")),
             # [2.0 上下文策略] 历史渲染统一走 render_history（剥离元数据）
             "conversation_history": render_history(
                 get_conversation_history(state), "yaml"),

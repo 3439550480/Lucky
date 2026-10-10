@@ -60,7 +60,7 @@ async def default_answer(state: DataAgentState, runtime: Runtime[DataAgentContex
                                  "memory_block", "query"],
             ) | llm | StrOutputParser()
             chain_input = {
-                "system_prefix": build_system_prefix(),
+                "system_prefix": build_system_prefix(runtime.context.get("staff")),
                 # [2.0 上下文策略] 历史渲染统一走 render_history（元数据不透模型）
                 "conversation_history": render_history(
                     get_conversation_history(state), "text"),

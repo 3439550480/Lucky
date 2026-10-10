@@ -213,7 +213,7 @@ async def replenish_plan(state: DataAgentState, runtime: Runtime[DataAgentContex
             chain = prompt | llm | StrOutputParser()
             from app.agent.session.prefix import build_system_prefix
             explanation = await chain.ainvoke({
-                "system_prefix": build_system_prefix(),
+                "system_prefix": build_system_prefix(runtime.context.get("staff")),
                 "plan_summary": plan_summary,
                 "query": query,
             })

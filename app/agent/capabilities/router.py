@@ -35,6 +35,17 @@ _TOOL_MAP = {
     "replenish": ["replenish.plan"],
 }
 
+# 能力 → 所需权限点（2.0 上下文策略 1.4：代码层硬校验，能力级粒度）。
+# 用户拍板：dataquery.hot/sales 合并为 dataquery.query（热卖排行移前端侧边栏），
+# 权限校验全部落在能力级——inventory 与 dataquery 虽共用入口，校验在路由出口按
+# 能力分别判定，无需能力内语义细分。default 兜底不设权限。
+_CAPABILITY_PERM = {
+    "dataquery": "dataquery.query",
+    "inventory": "inventory.read",
+    "replenish": "replenish.store",
+    "warehouse_replenish": "replenish.warehouse",   # 预留能力启用时自动生效
+}
+
 
 def _disabled_capabilities() -> set[str]:
     """按 Feature Flags 计算本轮被禁用的能力（2.0 S3b 门控）。
@@ -64,6 +75,19 @@ def _finish(writer, registry: CapabilityRegistry, holder,
             "capability_source": source, "tool_calls": tool_calls, "intent_reply": ""}
 
 
+def _finish_denied(writer, holder, capability: str, staff, required: str) -> dict:
+    """权限拒绝出口（2.0 上下文策略 1.4）：不改写能力语义——capability 照实写入
+    （评估/审计能看到"他想用什么"），由 permission_denied 节点终点化。
+    source 记 "denied"，tool_metrics 据此过滤；tool_calls 置空（未调用任何工具）。"""
+    holder.value = capability
+    logger.warning(f"[auth] 权限拒绝: {staff.staff_id}（{staff.role_codes}）"
+                   f"请求 {capability}，缺权限点 {required}")
+    writer({"type": "progress", "step": "理解用户意图", "status": "success"})
+    return {"capability": capability, "intent": capability,
+            "capability_source": "denied", "tool_calls": [], "intent_reply": "",
+            "permission_denied": True, "denied_permission": required}
+
+
 async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentContext]) -> dict:
     """路由节点主体：五级递进，永不抛异常（所有失败都落到兜底能力）"""
     writer = runtime.stream_writer
@@ -72,10 +96,21 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
     writer({"type": "progress", "step": "理解用户意图", "status": "running"})
     query = state["query"]
 
-    # 总开关关闭 → 恒 dataquery（关 = 旧行为，00 红线；用户芯片选择一并忽略）
+    # 总开关关闭 → 恒 dataquery（关 = 旧行为，00 红线；用户芯片选择一并忽略）。
+    # 权限校验不受此开关影响——安全边界独立于路由实验开关
     if not app_config.features.capability_routing:
         logger.info("能力路由已关闭，直通 dataquery（旧路径）")
-        return _finish(writer, registry, holder, "dataquery", "fallback")
+        denied = _deny("dataquery")
+        return denied if denied else _finish(writer, registry, holder, "dataquery", "fallback")
+
+    def _deny(capability: str) -> dict:
+        """能力级权限硬校验（策略 1.4）：staff 为 None（评测/离线路径）时跳过——
+        评估直接构造图运行，不经过鉴权，保持旧行为可测"""
+        required = _CAPABILITY_PERM.get(capability)
+        staff = runtime.context.get("staff")
+        if required and staff is not None and not staff.has(required):
+            return _finish_denied(writer, holder, capability, staff, required)
+        return {}
 
     disabled = _disabled_capabilities()
 
@@ -85,7 +120,8 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
         cap = registry.capabilities.get(requested)
         if cap and cap.selectable and cap.name not in disabled:
             logger.info(f"路由(tier0-user): {requested}")
-            return _finish(writer, registry, holder, requested, "user")
+            denied = _deny(requested)
+            return denied if denied else _finish(writer, registry, holder, requested, "user")
         logger.warning(f"请求的 capability '{requested}' 不可选/已禁用，忽略并走自动路由")
 
     # ---- tier 1: 规则快路径（高确定性正则，命中 0 token）----
@@ -93,7 +129,8 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
         hit = registry.match_rules(query, skip=disabled)
         if hit:
             logger.info(f"路由(tier1-rules): {hit}")
-            return _finish(writer, registry, holder, hit, "rules")
+            denied = _deny(hit)
+            return denied if denied else _finish(writer, registry, holder, hit, "rules")
 
     # ---- tier 2: embedding 安全网（故障降级到 LLM，不阻断路由）----
     if app_config.features.embedding_route:
@@ -104,7 +141,8 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
             hit = await registry.match_embedding(query_vector, skip=disabled)
             if hit:
                 logger.info(f"路由(tier2-embedding): {hit[0]} score={hit[1]:.3f}")
-                return _finish(writer, registry, holder, hit[0], "embedding")
+                denied = _deny(hit[0])
+                return denied if denied else _finish(writer, registry, holder, hit[0], "embedding")
         except Exception as e:
             logger.warning(f"embedding 安全网异常，跳过落入 LLM: {e}")
 
@@ -121,7 +159,8 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
                 input_variables=["system_prefix", "conversation_history", "query"],
             ) | classifier | JsonOutputParser()
             chain_input = {
-                "system_prefix": build_system_prefix(),
+                # [2.0 上下文策略 1.2] 前缀按角色渲染【当前用户】段（4 份分裂）
+                "system_prefix": build_system_prefix(runtime.context.get("staff")),
                 # [2.0 上下文策略] 历史渲染统一走 render_history（元数据不透模型）
                 "conversation_history": render_history(
                     get_conversation_history(state), "text"),
@@ -150,7 +189,8 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
             return _finish(writer, registry, holder, registry.default_capability, "fallback")
         if cap in registry.capabilities:
             logger.info(f"路由(tier3-llm): {cap}")
-            return _finish(writer, registry, holder, cap, "llm")
+            denied = _deny(cap)
+            return denied if denied else _finish(writer, registry, holder, cap, "llm")
         # 分类成功但值不在注册表 → default_capability
         logger.warning(f"LLM 分类结果 '{cap}' 不在注册表，兜底 default")
         return _finish(writer, registry, holder, registry.default_capability, "fallback")

@@ -83,7 +83,7 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
         }
         if app_config.features.context_management:
             from app.agent.session.prefix import build_system_prefix
-            chain_input["system_prefix"] = build_system_prefix()
+            chain_input["system_prefix"] = build_system_prefix(runtime.context.get("staff"))
 
         result = await chain.ainvoke(chain_input)
         logger.info(f"生成的SQL：{result}")
