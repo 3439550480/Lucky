@@ -6,12 +6,15 @@ SQL 生成节点
 """
 
 import yaml
+import datetime
+
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
-from app.agent.session.history_provider import get_conversation_history, render_history
+from app.agent.session.condition_extractor import build_inherited_block
+from app.agent.session.history_provider import get_conversation_history
 from app.agent.state import DataAgentState
 from app.conf.app_config import app_config
 from app.core.log import logger
@@ -38,10 +41,17 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
         # 开 = history_provider 全量 + 三区结构（前缀稳定，KV cache 可命中）
         # 关 = 现状行为（最近 10 条 + legacy 混排模板）——对照实验基线
         if app_config.features.context_management:
-            # [2.0 上下文策略] 历史渲染统一走 render_history（剥离 capability/ts 元数据）
-            history_yaml = render_history(get_conversation_history(state), "yaml")
+            # [2.0 上下文策略 1.6.9] 条件提取替代整段历史：generate_sql 只需要
+            # "条件与实体"（在 user query 里），不需要助手的数字长回复——
+            # 结构化继承块 + 最近 1 轮原文兜底，缓存更友好、token 更省
+            try:
+                today = datetime.date.fromisoformat(str(date_info.get("date", ""))[:10])
+            except Exception:
+                today = None
+            inherited = build_inherited_block(
+                query, get_conversation_history(state), today)
             template = load_prompt("generate_sql")
-            input_variables = ["system_prefix", "conversation_history", "memory_block",
+            input_variables = ["system_prefix", "inherited_conditions", "memory_block",
                                "table_infos", "metric_infos", "date_info", "db_info", "query"]
             # [06 记忆注入] 动态尾部（对话历史之后、本次上下文之前，06 §3.4 纪律）；
             # long_term 关闭/无记忆/检索失败 → 空串（模板结构不变，缓存照常命中）
@@ -78,7 +88,7 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
             "date_info": yaml.dump(date_info, allow_unicode=True, sort_keys=False),
             "db_info": yaml.dump(db_info, allow_unicode=True, sort_keys=False),
             "query": query,
-            "conversation_history": history_yaml,
+            "inherited_conditions": inherited,
             "memory_block": memory_block,
         }
         if app_config.features.context_management:

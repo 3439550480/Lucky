@@ -36,7 +36,6 @@ from app.core.log import logger
 from app.prompt.prompt_loader import load_prompt
 
 # 品类取值与 dim_replenish_policy.category / dim_product.category_l1 逐字对应
-_CATEGORIES = ("鞋类", "服装类", "配件类")
 _PLAN_EVENT_ROWS = 50   # SSE 事件携带的明细行上限（表格演示够用，防止超大 payload）
 
 
@@ -98,31 +97,17 @@ def compute_replenish(
 
 
 # ==================== 范围解析（品类，含多轮继承） ====================
-
-def _parse_scope(query: str) -> list[str]:
-    return [c for c in _CATEGORIES if c in query]
-
+# [2.0 上下文策略 1.6.8/1.6.9] 本节点原 _resolve_scope 是"代码按需提条件"模式的
+# 雏形，已泛化为公共组件 condition_extractor——此处收敛为调用方，行为逐字一致
+# （本轮优先 → 继承上一轮 → 全店；兼容两种轨迹状态）。
 
 def _resolve_scope(query: str, state: DataAgentState) -> list[str]:
-    """品类范围：本轮优先 → 继承对话最近一轮的用户提及 → 全店（空列表）。
-    注意：replenish 直连入口不走 extract_keywords，当前问句通常尚未入轨迹；
-    但 inventory 同入口路径下当前问句可能已写入——跳过与当前问句相同的
-    末条用户消息，两种情形下"上一轮"语义都正确。"""
-    hits = _parse_scope(query)
+    """品类范围：委托公共组件（保留薄封装以兼容既有调用点与测试语义）"""
+    from app.agent.session.condition_extractor import resolve_categories
+    hits = resolve_categories(query, get_conversation_history(state))
     if hits:
-        return hits
-    for message in reversed(get_conversation_history(state)):
-        if message.get("role") != "user":
-            continue
-        content = str(message.get("content", ""))
-        if content == query:
-            continue    # 当前轮已入轨迹（extract_keywords 先写的情形），跳过找真正的上一轮
-        hits = _parse_scope(content)
-        if hits:
-            logger.info(f"[replenish] 品类继承自上一轮: {hits}")
-            return hits
-        break   # 只看最近一轮，避免把很久以前的限定词翻出来
-    return []
+        logger.info(f"[replenish] 品类范围: {hits}")
+    return hits
 
 
 # ==================== 节点主体 ====================
