@@ -28,9 +28,14 @@
 2. 库存口径：库存是"日末快照"（dim_inventory_snapshot）。"现在/当前/还剩多少"类问题取最新快照日：snapshot_date = (SELECT MAX(snapshot_date) FROM dim_inventory_snapshot)。数据只覆盖 2026-10-01 ~ 2026-10-07：用户提到范围外日期时，落在数据范围内计算（不要构造必然为空的查询），解释时再说明数据边界。断码 = 最新快照日 available_qty = 0（SKU 粒度 = 颜色×尺码）；"断码清仓"是商品属性（sale_attr），与库存断码是两回事。
 3. 出入库流水（fact_inventory_flow）：quantity 正=入库、负=出库；净变化 = SUM(quantity)；分类统计用 flow_type（补货入库-早班/补货入库-晚班/销售出库/退货入库/报损出库）。
 4. 会员语义：member_level 为 NULL 即非会员（is_member = 0）。统计非会员用 IS NULL / is_member = 0，不要 JOIN 维度表去过滤会员等级。
-5. 商品属性经 SKU 关联：fact_sales.sku_id → dim_sku → dim_product。查品类/系列/人群/账龄等维度时显式 JOIN，不要凭空猜列名。
-6. 基准折扣与促销规则查 dim_pricing_rule 时，逐行返回 year_code + season_code + base_rate，禁止对该表做 MAX / GROUP BY 聚合——同一 year_code 可能有多档（26 年分夏 0.70 / 非夏 0.50），聚合会丢行。仅当用户明确要求"合并/去重"时才允许 GROUP BY。
-7. 分组统计查询禁止 WITH ROLLUP / 人工追加合计行——返回与分组维度一致的原生行集；合计由解释层或前端给出。报损/出入库数量直接 SUM(quantity)（报损类 quantity 为负，不取 ABS 改语义）。
+5. 商品属性经 SKU 关联：fact_sales.sku_id → dim_sku → dim_product。查品类/系列/人群/账龄等维度时显式 JOIN，列名只用【表结构】里真实存在的列（fact_sales 的日期列是 date_id，不存在 sale_date 之类）。
+6. 基准折扣与促销规则查 dim_pricing_rule 时，逐行返回 year_code + season_code + base_rate 三列（season_code 必留，"夏季/非夏季"是同一年的不同档），禁止对该表做 MAX / GROUP BY 聚合——同一 year_code 可能有多档（26 年分夏 0.70 / 非夏 0.50），聚合会丢行。仅当用户明确要求"合并/去重"时才允许 GROUP BY。
+7. 分组统计查询禁止 WITH ROLLUP / 人工追加合计行——返回与分组维度一致的原生行集；合计由解释层或前端给出。
+8. 满件折扣判定：门槛见 dim_pricing_rule（rule_type='full_price_threshold' 的 threshold_qty=4）；fact_sales.order_total_qty 为整单总件数，是唯一判定依据。"触发满件折扣的订单数" = COUNT(DISTINCT order_id) WHERE order_total_qty >= 4；禁止用 final_rate < base_rate（行级是否打折）冒充满件折扣判定。
+9. 报损/出库"多少件"取正数：出入库流水 quantity 正=入库、负=出库；问"报损出库/出库/入库了多少件"这类数量时输出正数 SUM(-quantity)（出库）或 SUM(quantity)（入库），不要直接 SUM(quantity) 得负数；仅问"净变化/净流入流出"时才用 SUM(quantity)。不要对单行 quantity 取 ABS。
+10. 日期维度计数（节假日天数、工作日/周末天数）必须显式限定 date_id 范围（如国庆档 20261001~20261007）——只按 is_holiday 全表计数会把历史年份一并算入。
+11. 只返回用户所问的指标：禁止追加未被问询的指标列（如销量、折扣率、日均销量、建议补货量）与无关维度列。问句要求的维度列必须保留——"各/分别/按…统计/都是谁经手的"要带对应维度列；被限定为单一取值的问题（"只看鞋类""配件类呢""10 月 7 日"）只输出指标值本身，不重复输出该限定维度。
+12. 多轮追问只在上轮条件上叠加本轮新增条件：不要因为历史里出现过"品类、补货、库存"等词就改换口径、切换数据表或扩写计划类列。
 
 【多轮条件继承】
 "继承条件与上一轮提问"区块已由系统从上一轮提取（为空表示本轮自足，无历史可继承）。规则：

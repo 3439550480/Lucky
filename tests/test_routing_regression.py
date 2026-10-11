@@ -53,6 +53,26 @@ def test_tier1_no_new_misfire():
     assert misfires <= BASELINE_MISFIRES, f"新增确定性误抢: {misfires - BASELINE_MISFIRES}"
 
 
+# ---- tier 1.5 省略式追问继承（P2 确定性实现）：正则边界单测 ----
+ELLIPSIS_YES = [
+    "那鞋类呢？", "那只看鞋类呢？", "那北京呢", "42 码呢", "那配件类呢?", "这个呢",
+]
+ELLIPSIS_NO = [
+    "现在还有多少可用库存？",          # 完整句，不该被判为省略追问
+    "国庆 7 天整体的平均折扣率是多少？",
+    "那国庆期间的销售额是多少？",      # 含"那"但非省略句，必须交下层判定
+    "断码清仓的商品卖了多少钱呢？",    # 有实词内容，不在收窄范围内（超 8 字）
+]
+
+
+def test_ellipsis_regex_boundary():
+    from app.agent.capabilities.router import _ELLIPSIS_RE
+    for q in ELLIPSIS_YES:
+        assert _ELLIPSIS_RE.match(q), f"省略式追问漏判: {q}"
+    for q in ELLIPSIS_NO:
+        assert not _ELLIPSIS_RE.match(q), f"非省略句误判（会盲目继承上一轮能力）: {q}"
+
+
 if __name__ == "__main__":
     correct, misfires, missed = _tier1_split()
     print(f"tier1 正确 {len(correct)} / 误抢 {len(misfires)} / 未命中落下层 {len(missed)}")
@@ -60,6 +80,8 @@ if __name__ == "__main__":
     print("误抢集:", sorted(misfires))
     test_tier1_no_regression()
     test_tier1_no_new_misfire()
+    test_ellipsis_regex_boundary()
     print("PASS test_tier1_no_regression")
     print("PASS test_tier1_no_new_misfire")
-    print("ALL GWT OK (2 cases)")
+    print("PASS test_ellipsis_regex_boundary")
+    print("ALL GWT OK (3 cases)")

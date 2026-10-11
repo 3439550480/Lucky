@@ -5,6 +5,7 @@
 五级通道（每级未命中/失败自动落入下一级）：
   tier 0  用户芯片显式选择（selectable=true 的能力）—— 确定性 100%
   tier 1  规则快路径（高确定性正则，0 token）
+  tier 1.5 省略式追问继承上一轮能力（确定性，0 token——见 _ELLIPSIS_RE）
   tier 2  embedding 安全网（examples 向量相似度 >= 阈值）
   tier 3  LLM 分类（classifier_provider，暂定 deepseek）
   兜底    error_capability=default（致歉并建议重试）
@@ -12,6 +13,8 @@
 发 progress 事件。capability_source 记录路由来源，03 评估据此过滤
 （tool_metrics 只统计 source != "user" 的自动路由）。
 """
+import re
+
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
 from langgraph.runtime import Runtime
@@ -59,6 +62,32 @@ def _disabled_capabilities() -> set[str]:
     if not flags.capability_replenish:
         disabled.add("replenish")
     return disabled
+
+
+# 省略式追问的确定性判据（tier 1.5）：短句 + 以"呢"收尾，如"那鞋类呢""那北京呢""42 码呢"。
+# 为何要确定性而不只靠提示词：render_history 剥离 capability 元数据，而 tier 2 embedding
+# 对这类无实词短句极不稳定（实测"那鞋类呢"抢到 dataquery，而上一轮是 inventory）。
+# 刻意收窄——仅匹配"（可选指代词）+ 极短内容 + 呢 + 可选问号"，不匹配"差多少/还有多少"等
+# 可能真正换话题的追问。
+_ELLIPSIS_RE = re.compile(
+    r"^\s*(?:另外|那|那么|这个|这些|这边)?\s*[^，。；？！]{0,8}呢\s*[？?！!]?\s*$")
+
+
+def _previous_capability(state: DataAgentState, registry: CapabilityRegistry) -> str:
+    """取上一轮 assistant 轨迹条目的能力（省略式追问继承的显式信号，2.0 §P2）。
+
+    render_history 会剥离 capability 元数据，LLM 从文本无从得知上一轮用了哪个能力。
+    "那鞋类呢"这类省略句因此常被误判（replenish→dataquery）。此处把上一轮能力
+    作为独立变量注入 router 模板，让"沿用上一轮能力"从"要模型猜"变成"给模型看"。
+    取不到（首轮/无元数据/能力不在注册表）返回 "无"。"""
+    for msg in reversed(state.get("messages", [])):
+        if msg.get("role") != "assistant":
+            continue
+        cap = msg.get("capability")
+        if cap in registry.capabilities:
+            return cap
+        return "无"
+    return "无"
 
 
 def _finish(writer, registry: CapabilityRegistry, holder,
@@ -132,6 +161,16 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
             denied = _deny(hit)
             return denied if denied else _finish(writer, registry, holder, hit, "rules")
 
+    # ---- tier 1.5: 省略式追问确定性继承上一轮能力（2.0 §P2）----
+    # 与 tier 1 同类（0 token 确定性），故共用 rules_fast_path 开关。
+    # 上一轮能力取不到（首轮/元数据缺失）或已被 Feature Flags 禁用时不继承，落回 tier 2。
+    if app_config.features.rules_fast_path and _ELLIPSIS_RE.match(query):
+        prev_cap = _previous_capability(state, registry)
+        if prev_cap != "无" and prev_cap not in disabled:
+            logger.info(f"路由(tier1.5-inherit): 省略式追问继承上一轮能力 {prev_cap}")
+            denied = _deny(prev_cap)
+            return denied if denied else _finish(writer, registry, holder, prev_cap, "inherit")
+
     # ---- tier 2: embedding 安全网（故障降级到 LLM，不阻断路由）----
     if app_config.features.embedding_route:
         try:
@@ -156,7 +195,8 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
         if app_config.features.context_management:
             chain = PromptTemplate(
                 template=load_prompt("capability_route"),
-                input_variables=["system_prefix", "conversation_history", "query"],
+                input_variables=["system_prefix", "conversation_history",
+                                 "previous_capability", "query"],
             ) | classifier | JsonOutputParser()
             chain_input = {
                 # [2.0 上下文策略 1.2] 前缀按角色渲染【当前用户】段（4 份分裂）
@@ -164,6 +204,8 @@ async def route_capability(state: DataAgentState, runtime: Runtime[DataAgentCont
                 # [2.0 上下文策略] 历史渲染统一走 render_history（元数据不透模型）
                 "conversation_history": render_history(
                     get_conversation_history(state), "text"),
+                # 省略式追问继承的显式信号（元数据不透模型，故单独注入）
+                "previous_capability": _previous_capability(state, registry),
                 "query": query,
             }
         else:

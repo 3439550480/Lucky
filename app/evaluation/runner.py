@@ -150,9 +150,13 @@ class EvaluationRunner:
             query=turns[0], keywords=[],
             retrieved_column_infos=[], retrieved_metric_infos=[], retrieved_value_infos=[],
             table_infos=[], metric_infos=[], error="", sql="", retry_count=0,
-            messages=[], intent="", intent_reply="",
+            intent="", intent_reply="",
             requested_capability="",                     # 恒空：runner 不带芯片，走自动路由（§3.9 口径）
             capability="", capability_source="", tool_calls=[],
+            # [多轮修复] 刻意不传 messages——query_service 同样不传（checkpointer 负责恢复
+            # 上一轮轨迹）。此前传 messages=[] 会把 checkpoint 里的历史**覆盖为空**，
+            # 多轮用例的指代消解/条件继承在评测里静默失效（实测 router 处 len(messages)==0），
+            # 与在线行为不一致 → 多轮结论失真。
         )
         try:
             async with dw_mgr.session_factory() as dw_session, \
@@ -184,8 +188,9 @@ class EvaluationRunner:
                             query=turn, keywords=[],
                             retrieved_column_infos=[], retrieved_metric_infos=[], retrieved_value_infos=[],
                             table_infos=[], metric_infos=[], error="", sql="", retry_count=0,
-                            messages=[], intent="", intent_reply="",
+                            intent="", intent_reply="",
                             requested_capability="", capability="", capability_source="", tool_calls=[],
+                            # [多轮修复] 同首轮：不传 messages，历史由 checkpointer 按 thread_id 恢复
                         )
                         logger.info(f"[eval] 用例 {case.id} 第 {i + 1}/{len(turns)} 轮: {turn}")
                     final_state = await graph.ainvoke(
