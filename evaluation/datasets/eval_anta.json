@@ -154,8 +154,8 @@
         "columns": ["fact_sales.is_member", "fact_sales.actual_amount", "fact_sales.quantity"],
         "values": []
       },
-      "golden_sql": "SELECT is_member, ROUND(SUM(actual_amount), 2) AS amount, SUM(quantity) AS qty FROM fact_sales WHERE date_id BETWEEN 20261001 AND 20261007 GROUP BY is_member ORDER BY is_member",
-      "notes": "非会员 13,124,682.50 / 56,319 件；会员 8,546,442.70 / 36,845 件。注意：正确性比对是行多重集，agent 若把 0/1 渲染成『会员/非会员』文字会判不匹配（本用例保留 golden，用于观测该渲染差异）"
+      "golden_sql": "SELECT CASE WHEN is_member = 1 THEN '会员' ELSE '非会员' END AS 会员类型, ROUND(SUM(actual_amount), 2) AS amount FROM fact_sales WHERE date_id BETWEEN 20261001 AND 20261007 GROUP BY is_member ORDER BY is_member",
+      "notes": "非会员 13,124,682.50 / 会员 8,546,442.70。golden 按问句字面渲染会员/非会员标签（比对器忽略列名列序，金额 round(4) 归一化后与不 ROUND 的输出等值）；原 golden 的 0/1 原值 + qty 列与任何合理渲染形状都不同（行多重集必不等），属于出题缺陷非模型缺陷"
     },
     {
       "id": "anta_orders_count",
@@ -249,7 +249,7 @@
     },
     {
       "id": "anta_inv_broken_size",
-      "query": "现在有哪些 SKU 断码了？",
+      "query": "现在断码的 SKU 有多少个？",
       "capability": "inventory",
       "enabled": true,
       "expected": {

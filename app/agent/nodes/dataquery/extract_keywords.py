@@ -9,7 +9,9 @@ import jieba.analyse
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
+from app.agent.session.condition_extractor import extract_conditions, last_user_text
 from app.agent.session.context_store import append_user_message
+from app.agent.session.history_provider import get_conversation_history
 from app.agent.state import DataAgentState
 from app.conf.app_config import app_config
 from app.core.log import logger
@@ -51,6 +53,22 @@ async def extract_keywords(state: DataAgentState, runtime: Runtime[DataAgentCont
 
         # extract_tags 会基于 TF-IDF 抽取关键词，并按 allowPOS 做词性过滤
         keywords = jieba.analyse.extract_tags(query, allowPOS=allow_pos)
+
+        # [P0-3 召回继承] 省略句的召回种子并入继承条件（策略 1.6.9+1.6.12）：
+        # "那只看鞋类呢" 实测只召回到品类/补货/流水域列，fact_sales.actual_amount
+        # 未召回 → filter_table 把 fact_sales 过滤出表 → SQL 跑偏补货策略表。
+        # 【继承条件】块已让模型知道"指标=销售额"，这里让召回也知道——两层对齐才闭环。
+        # 失败仅表现为召回偏移（单点可回退），不阻断主流程。
+        try:
+            prev_text = last_user_text(get_conversation_history(state), query)
+            if prev_text:
+                inherited_words = [str(v) for k, v in extract_conditions(prev_text).items()
+                                   if k != "时间"]      # 时间已由 date_info/继承块承载，不进召回
+                if inherited_words:
+                    keywords = list(set(keywords + inherited_words))
+                    logger.info(f"[keywords] 召回继承并入: {inherited_words}")
+        except Exception as e:
+            logger.warning(f"[keywords] 召回继承失败（跳过）: {e}")
 
         # 保留原始问题作为兜底检索入口，避免关键词切分不准时丢掉完整语义
         # set 用来去重；顺序不参与后续判断，所以这里不依赖关键词顺序

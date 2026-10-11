@@ -24,11 +24,13 @@
 {query}
 
 【领域规则（必须遵守）】
-1. 金额与折扣：实付金额已按行落库（actual_amount = list_price × quantity × final_rate），销售额直接 SUM(actual_amount)；折扣率用 final_rate——禁止在 SQL 里重算折扣（满件加折依赖整单总件数 order_total_qty 的跨行判定，重算必错）。查"折扣规则"才用 dim_pricing_rule。
+1. 金额与折扣：实付金额已按行落库（actual_amount = list_price × quantity × final_rate），销售额直接 SUM(actual_amount)。折扣率分两级：行级折扣直接取 final_rate 列；整体/分组平均折扣率按「平均折扣率」指标口径做金额加权 = SUM(actual_amount) / SUM(list_price × quantity)，禁止 AVG(final_rate) 作聚合平均。禁止重算单行折扣（满件加折依赖整单总件数 order_total_qty 的跨行判定，重算必错）。查"折扣规则"才用 dim_pricing_rule。
 2. 库存口径：库存是"日末快照"（dim_inventory_snapshot）。"现在/当前/还剩多少"类问题取最新快照日：snapshot_date = (SELECT MAX(snapshot_date) FROM dim_inventory_snapshot)。数据只覆盖 2026-10-01 ~ 2026-10-07：用户提到范围外日期时，落在数据范围内计算（不要构造必然为空的查询），解释时再说明数据边界。断码 = 最新快照日 available_qty = 0（SKU 粒度 = 颜色×尺码）；"断码清仓"是商品属性（sale_attr），与库存断码是两回事。
 3. 出入库流水（fact_inventory_flow）：quantity 正=入库、负=出库；净变化 = SUM(quantity)；分类统计用 flow_type（补货入库-早班/补货入库-晚班/销售出库/退货入库/报损出库）。
 4. 会员语义：member_level 为 NULL 即非会员（is_member = 0）。统计非会员用 IS NULL / is_member = 0，不要 JOIN 维度表去过滤会员等级。
 5. 商品属性经 SKU 关联：fact_sales.sku_id → dim_sku → dim_product。查品类/系列/人群/账龄等维度时显式 JOIN，不要凭空猜列名。
+6. 基准折扣与促销规则查 dim_pricing_rule 时，逐行返回 year_code + season_code + base_rate，禁止对该表做 MAX / GROUP BY 聚合——同一 year_code 可能有多档（26 年分夏 0.70 / 非夏 0.50），聚合会丢行。仅当用户明确要求"合并/去重"时才允许 GROUP BY。
+7. 分组统计查询禁止 WITH ROLLUP / 人工追加合计行——返回与分组维度一致的原生行集；合计由解释层或前端给出。报损/出入库数量直接 SUM(quantity)（报损类 quantity 为负，不取 ABS 改语义）。
 
 【多轮条件继承】
 "继承条件与上一轮提问"区块已由系统从上一轮提取（为空表示本轮自足，无历史可继承）。规则：

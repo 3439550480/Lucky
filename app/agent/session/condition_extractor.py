@@ -101,6 +101,25 @@ def _last_user_text(history: list[dict], current_query: str) -> str | None:
     return None
 
 
+def last_user_text(history: list[dict], current_query: str) -> str | None:
+    """上一轮 user 原文的公开入口（extract_keywords 召回继承消费）。
+
+    谁调用：extract_keywords（P0-3 召回继承）——省略句"那只看鞋类呢"需要把上一轮
+    的条件词（指标/品类）并入召回种子，否则检索层看不见继承条件，SQL 必跑偏。
+    链路位置：routing → extract_keywords → recall_*；本函数只做"取上一轮"这一步。
+    设计 why：复用 _last_user_text 的"跳过与当前问句相同条目"兼容逻辑
+    （extract_keywords 已把本轮 query 写入轨迹，最后一条 user 就是本轮），不复制易漂移。
+
+    示例：
+        history = [{"role": "user", "content": "销售额最高的商品是哪个"},
+                   {"role": "assistant", "content": "..."},
+                   {"role": "user", "content": "那只看鞋类呢"}]
+        last_user_text(history, "那只看鞋类呢")
+        # → "销售额最高的商品是哪个"
+    """
+    return _last_user_text(history, current_query)
+
+
 def resolve_categories(current_query: str, history: list[dict]) -> list[str]:
     """品类范围解析（replenish 专用语义）：本轮 → 继承上一轮 → 全店（空列表）。
     与原 replenish_plan._resolve_scope 行为逐字一致，仅实现收敛到本组件"""

@@ -388,9 +388,15 @@ metrics:
       - fact_sales.quantity
     alias: [吊牌价金额, 原价金额, 标价金额]
   - name: 平均折扣率
-    description: 实际成交折扣 = AVG(fact_sales.final_rate)（已预计算，勿在 SQL 重算）。
+    description: >
+      折扣率分两级口径：① 行级折扣 = fact_sales.final_rate（已预计算列，明细场景直接取该列）；
+      ② 整体/分组平均折扣率（金额加权）= SUM(actual_amount) / SUM(list_price × quantity)。
+      禁止 AVG(final_rate) 作聚合平均——行平均 ≠ 金额加权（大单低折扣会被高销量摊薄）。
     relevant_columns:
       - fact_sales.final_rate
+      - fact_sales.actual_amount
+      - fact_sales.list_price
+      - fact_sales.quantity
     alias: [折扣率, 实际折扣, 平均折扣]
   - name: 动销率
     description: 动销率 = 有销量的 SKU 数 ÷ 在售 SKU 总数（SKU 级售卖广度）。
