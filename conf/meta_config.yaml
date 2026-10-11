@@ -67,11 +67,11 @@ tables:
 
   - name: dim_sku
     role: dim
-    description: SKU 维度表。一行 = 货号-色-码 的一个销售单元。库存快照与出入库流水均按 sku_id 粒度记录——查"某商品还剩几件"经 sku_id 关联 dim_inventory_snapshot。
+    description: SKU 维度表。一行 = 货号-色-码 的一个销售单元。库存快照与出入库流水均按 sku_id 粒度记录——查"某商品还剩几件"经 sku_id 关联 dim_inventory_snapshot。注意：尺码没有独立列，取 sku_id 的第三段（substring_index(sku_id,'-',-1)，如 10242018-01-41 → 41、10242018-01-均码 → 均码）。
     columns:
       - name: sku_id
         role: primary_key
-        description: SKU 编码，格式 货号-色号-尺码（如 15262019-01-42）。库存快照与出入库流水的外键粒度。
+        description: SKU 编码，格式 货号-色号-尺码（如 15262019-01-42）。尺码无独立列，按尺码筛选/分组用 substring_index(sku_id,'-',-1) = '41'。库存快照与出入库流水的外键粒度。
         alias: [SKU, SKU编码, SKU编号]
         sync: true
       - name: product_id
