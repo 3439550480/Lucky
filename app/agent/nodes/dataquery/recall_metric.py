@@ -46,16 +46,21 @@ async def recall_metric(state: DataAgentState, runtime: Runtime[DataAgentContext
         result = await chain.ainvoke({"query": query})
 
         # 通用关键词和指标扩展词都参与召回，提升同义指标的命中率
-        keywords = set(keywords + result)
+        # [S5 可复现性] 保序去重：原先用 set，迭代顺序受 PYTHONHASHSEED 影响，
+        # 而下面按「首次命中顺序」写回 state（dict 保序）→ 同一 commit 连跑 3 次
+        # 实测 metrics recall = 1.0 / 0.0 / 1.0（阈值边界处命中随顺序翻转）。
+        keywords = list(dict.fromkeys(list(keywords) + list(result)))
 
         # 用指标 id 做唯一键，避免多个关键词命中同一个指标时重复写入 state
         metric_info_map: dict[str, MetricInfo] = {}
         for keyword in keywords:
             # 指标库是向量集合，查询词必须先 Embedding 成 query vector
             embedding = await embedding_client.aembed_query(keyword)
+            # [S5] limit 放宽到 50：指标集合共约 16 个语义点（名称/描述/别名各一点），
+            # 默认 20 的额度会被同一指标的多条语义点吃掉，其他指标就带不回来了
             current_metric_infos: list[
                 MetricInfo
-            ] = await metric_qdrant_repository.search(embedding)
+            ] = await metric_qdrant_repository.search(embedding, limit=50)
             for metric_info in current_metric_infos:
                 if metric_info.id not in metric_info_map:
                     metric_info_map[metric_info.id] = metric_info

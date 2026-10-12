@@ -65,14 +65,17 @@ async def extract_keywords(state: DataAgentState, runtime: Runtime[DataAgentCont
                 inherited_words = [str(v) for k, v in extract_conditions(prev_text).items()
                                    if k != "时间"]      # 时间已由 date_info/继承块承载，不进召回
                 if inherited_words:
-                    keywords = list(set(keywords + inherited_words))
+                    # [S5 可复现性] 保序去重（原 set 的迭代顺序随 PYTHONHASHSEED 变化）
+                    keywords = list(dict.fromkeys(keywords + inherited_words))
                     logger.info(f"[keywords] 召回继承并入: {inherited_words}")
         except Exception as e:
             logger.warning(f"[keywords] 召回继承失败（跳过）: {e}")
 
         # 保留原始问题作为兜底检索入口，避免关键词切分不准时丢掉完整语义
-        # set 用来去重；顺序不参与后续判断，所以这里不依赖关键词顺序
-        keywords = list(set(keywords + [query]))
+        # [S5 可复现性] 保序去重，且原始问句放最前（语义最完整，优先决定召回顺序）。
+        # 原实现 list(set(...)) 的迭代顺序受 PYTHONHASHSEED 影响 → 下游按「首次命中顺序」
+        # 写回 retrieved_* → 同一 commit 连跑 3 次实测 metrics recall = 1.0 / 0.0 / 1.0。
+        keywords = list(dict.fromkeys([query] + keywords))
 
         writer({"type": "progress", "step": step, "status": "success"})
         logger.info(f"抽取关键词成功: {keywords}")

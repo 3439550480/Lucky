@@ -29,3 +29,33 @@ class StaffIdentity:
     def primary_role_name(self) -> str:
         """主要角色显示名（前缀【当前用户】段用；多角色取第一个）"""
         return self.role_codes[0] if self.role_codes else ""
+
+
+def build_staff_identity(row: dict) -> StaffIdentity:
+    """dim_staff 行 → 身份快照（在线登录与评测注入的唯一共用入口）
+
+    谁调用：
+    - api/routers/auth_router.login —— 在线：PIN 校验通过后组装身份
+    - evaluation/runner.EvaluationRunner._prepare_staff —— 评测：按用例 staff_id 注入
+    链路位置：dim_staff 行 →（本函数）→ StaffIdentity →（在线）AuthSession /（评测）DataAgentContext
+    设计 why：评测升级方案 R1 的风险 #1 是"评测注入与在线不同构 → 评测失真"，
+    同构唯一可靠的保证方式是**同一个函数**组装：role_codes 的分割与权限点解析
+    （role_registry.resolve）若两处各写一遍迟早漂移——最典型的漂移是评测侧漏掉
+    resolve，权限点恒为空集，F4 权限矩阵会以"全部被拒"的形式假通过。
+
+    示例（评测侧）：
+        row = await StaffAuthRepository(session).get_staff("S001")
+        identity = build_staff_identity(row)
+        identity.has("inventory.read")   # True（S001 = STAFF 角色）
+    """
+    role_codes = [c.strip() for c in (row["role_codes"] or "").split(",") if c.strip()]
+    # 局部导入：roles 模块导入时即读 conf/roles.yaml（模块级单例）。放在函数内让身份值对象
+    # 保持"零配置依赖"——不把配置文件加载挂到每一个 import 本模块的脚本上
+    from app.agent.auth.roles import role_registry
+
+    return StaffIdentity(
+        staff_id=row["staff_id"],
+        name=row["name"],
+        role_codes=role_codes,
+        permissions=role_registry.resolve(role_codes),
+    )

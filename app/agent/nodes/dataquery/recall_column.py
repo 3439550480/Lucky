@@ -46,8 +46,10 @@ async def recall_column(state: DataAgentState, runtime: Runtime[DataAgentContext
 
         result = await chain.ainvoke({"query": query})
 
-        # 原始关键词和 LLM 扩展词一起参与召回；set 去重，避免重复请求同一关键词
-        keywords = set(keywords + result)
+        # 原始关键词和 LLM 扩展词一起参与召回
+        # [S5 可复现性] 保序去重（原 set 的顺序受 PYTHONHASHSEED 影响，
+        # 会让「首次命中顺序」在同样输入下抖动 → 报告里字段顺序/MRR 随之漂移）
+        keywords = list(dict.fromkeys(list(keywords) + list(result)))
 
         # 用字段 id 做唯一键，因为多个关键词、同一字段的多个向量点都可能命中同一个字段
         column_info_map: dict[str, ColumnInfo] = {}

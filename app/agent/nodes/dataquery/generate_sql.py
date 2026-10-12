@@ -37,6 +37,10 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
         db_info = state["db_info"]
         query = state["query"]
 
+        # [R2] 可测性初始化：开关关闭分支不产出继承块，统一补空值供尾部 state 写回
+        inherited = ""
+        memory_block = ""
+
         # [05 上下文管理] 历史读取与提示词模板按开关二选一：
         # 开 = history_provider 全量 + 三区结构（前缀稳定，KV cache 可命中）
         # 关 = 现状行为（最近 10 条 + legacy 混排模板）——对照实验基线
@@ -107,7 +111,12 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
         result = await chain.ainvoke(chain_input)
         logger.info(f"生成的SQL：{result}")
         writer({"type": "progress", "step": step, "status": "success"})
-        return {"sql": result}
+        # [R2] 诊断字段随 return 写回 state（评测断言用）：继承块内容 + 记忆块是否注入 +
+        # 历史区字符数（新路径历史区 = 继承块本身；legacy 路径为 0，见下方 else 分支）
+        return {"sql": result,
+                "inherited_conditions": inherited,
+                "memory_block": memory_block,
+                "history_chars": len(inherited)}
 
     except Exception as e:
         logger.error(f"{step} failed: {e}")

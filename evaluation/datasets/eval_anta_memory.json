@@ -1,6 +1,8 @@
 {
   "dataset_id": "eval_anta_memory",
   "version": "1.0",
+  "scene": "F8 常规回归场（记忆组）",
+  "pass_line": 1.0,
   "description": "安踏特卖店 Agent 记忆评测集（S4 记忆组，3 例）——需以 --features memory.long_term=true 运行，否则 runner 会把这 3 例判为 skipped（06 §5）。判定口径：setup_runs 逐条跑完并提取记忆 → fresh store 落盘校验 → 新 thread_id 跨会话 probe；expected_recall 用边界感知子串匹配（memory_metrics.value_in_text）命中答复文本。",
   "defaults": {
     "match_mode": "exact",

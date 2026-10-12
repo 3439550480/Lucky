@@ -45,6 +45,30 @@ class InventoryWriteRepository:
         )
         return result.scalar()
 
+    async def get_flow(self, doc_no: str) -> dict | None:
+        """按单据号取流水行（评测"写库结果"断言的证据来源）；无该单据返回 None
+
+        谁调用：evaluation/runner._run_case（仅当用例声明 expect_flow_doc 时）
+        链路位置：flow_step 确认门 → commit_flow 写库 →（本函数）→ 断言器判定
+        "单据已落流水 + 经办人 = 注入身份"
+        设计 why：提交成功与"取消/超时"在 state 里表现完全一致（都是 pending_action=None），
+        只断言槽位清空无法区分"真的记了账"和"被取消了"。流水表是唯一 ground truth，
+        且经办人字段就在同一行上——一次查询同时覆盖方案 R3 的"流水 + 经办人"两条要求，
+        不必为经办人另开通道。
+
+        示例：await repo.get_flow("RK2026101001")
+              → {"doc_no": "RK2026101001", "flow_type": "补货入库-早班",
+                 "sku_id": "15262020-01-39", "quantity": 20,
+                 "operator_id": "S001", "operator": "王芳"}
+        """
+        result = await self.session.execute(
+            text("SELECT doc_no, flow_type, sku_id, quantity, date_id, "
+                 "operator_id, operator FROM fact_inventory_flow WHERE doc_no = :d"),
+            {"d": doc_no},
+        )
+        row = result.mappings().first()
+        return dict(row) if row else None
+
     async def commit_flow(self, *, direction: str, doc_no: str, sku_id: str,
                           qty: int, operator_id: str, operator_name: str) -> dict:
         """确认后的写库：flow 插入 + 快照联动，单事务提交。

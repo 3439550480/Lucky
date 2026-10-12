@@ -1,0 +1,137 @@
+{
+  "dataset_id": "f1_routing",
+  "version": "1.0",
+  "scene": "F1 路由对抗场",
+  "pass_line": 0.9,
+  "description": "F1 路由对抗场（口径 2026-10-12）：专打『同一实体、多个意图』与『否定句』——「鞋」既可能是卖了多少（dataquery）也可能是还剩多少（inventory），「补货/清仓/业绩」等词又容易把路由带偏。判据不靠文案，靠两类硬证据：①SQL 实际查了哪张表（expect_sql_tables / not_tables——每个用例都成对声明『该查什么』与『不许串到什么』）；②流程/权限状态字段。口径纪律：①F1 与 F2 的分界 = F1 只测**单轮**路由，F2 才有多轮继承；②『不查库』的能力（default/replenish）用 not_tables 表达（SQL 为空时 not 断言恒真，正好当『没查库』的判据）；③本场通过线 0.9：允许 1 例（F1-11 单据流水查询）暴露 meta 未覆盖 fact_inventory_flow 之类的基础设施缺口，但缺口必须显式记录、不许静默。",
+  "defaults": { "match_mode": "exact", "k": 5 },
+  "cases": [
+    {
+      "id": "F1-01-negation-entity-stock",
+      "query": "不要给我补货建议，直接查一下鞋类还有多少库存？",
+      "capability": "inventory",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_sql_tables": ["dim_inventory_snapshot"],
+      "expect_sql_not_tables": ["dim_replenish_policy", "fact_sales"],
+      "notes": "否定句 + 实体词陷阱：句子里同时出现『补货』（replenish 触发词）与『库存』（inventory）与『不要』（否定）→ 必须落到库存读侧、且不得碰补货策略表。这是路由三连坑里最容易翻的一条"
+    },
+    {
+      "id": "F1-02-same-entity-sales-side",
+      "query": "断码清仓的鞋卖了多少？",
+      "capability": "dataquery",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_sql_tables": ["fact_sales"],
+      "expect_sql_not_tables": ["dim_inventory_snapshot"],
+      "notes": "同实体·销售侧：『断码』既可能指库存属性也可能指清仓动作，问『卖了多少』→ 主证据必须是销售事实表，且不得退化成查库存快照（串台回归）"
+    },
+    {
+      "id": "F1-03-same-entity-stock-side",
+      "query": "断码的鞋现在还剩几件？",
+      "capability": "inventory",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_sql_tables": ["dim_inventory_snapshot"],
+      "expect_sql_not_tables": ["fact_sales"],
+      "notes": "同实体·库存侧：与 F1-02 共用『断码的鞋』，仅问句落点不同 → 两条必须查不同的表。这构成路由对抗的最小对照对（同实体、意图反转）"
+    },
+    {
+      "id": "F1-04-negation-drop-sales",
+      "query": "不用看销售额了，库房还剩多少件 T 恤？",
+      "capability": "inventory",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_sql_tables": ["dim_inventory_snapshot"],
+      "expect_sql_not_tables": ["fact_sales"],
+      "notes": "否定 + 强触发词『销售额』：句中『销售额』是最强 dataquery 信号，但整句是否定 → 必须只查库存。若路由被『销售额』带走，not_tables 立刻变红"
+    },
+    {
+      "id": "F1-05-inventory-list",
+      "query": "店里现在有哪些 SKU 断码了？",
+      "capability": "inventory",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_sql_tables": ["dim_inventory_snapshot"],
+      "expect_sql_not_tables": ["fact_sales"],
+      "notes": "列表型库存问句（『有哪些』而非『有多少』）：容易被子串『哪些』带向销售排行 → 判据仍是『查快照、不查销售』"
+    },
+    {
+      "id": "F1-06-replenish-explicit",
+      "query": "帮我生成鞋类补货计划",
+      "capability": "replenish",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_permission_allowed": true,
+      "expect_pending_slots": {},
+      "notes": "显式补货意图：M001 有 replenish.store → 放行；且补货**不是**出入库流程，不得残留 pending_action。补货能力自己会查销量，故此处不用 not_tables（会误伤）"
+    },
+    {
+      "id": "F1-07-out-of-scope-default",
+      "query": "今天天气怎么样？",
+      "capability": "default",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_sql_not_tables": ["fact_sales", "dim_inventory_snapshot"],
+      "notes": "能力外问句：必须走兜底、不查库。not_tables 在 SQL 为空时恒真 → 这里正是『没查库』的判据（若被硬答成销售数据，SQL 必然带表 → 变红）"
+    },
+    {
+      "id": "F1-08-pronoun-no-context",
+      "query": "它现在还剩多少件？",
+      "capability": "default",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_sql_not_tables": ["fact_sales"],
+      "notes": "无上下文指代：首轮便用『它』且无任何实体 → 应追问而不是猜一个 SKU/品类乱查。本轮记录真实路由（若真的乱查，not_tables 会红）；不设表必含断言以免把『合理追问』误杀"
+    },
+    {
+      "id": "F1-09-compound-question",
+      "query": "国庆期间鞋类一共卖了多少件，现在库里还剩多少？",
+      "capability": "dataquery",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_sql_tables": ["fact_sales"],
+      "notes": "复合问句（销售 + 库存两个落点）：当前能力模型单一 → 断言主意图（销售侧）必须真的查销售表；前半段『国庆期间』是显式日期口径（20261001-20261007），不得因复合而丢掉"
+    },
+    {
+      "id": "F1-10-metric-alias",
+      "query": "国庆期间咱们店一共做了多少业绩？",
+      "capability": "dataquery",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_sql_tables": ["fact_sales"],
+      "notes": "指标别名：『业绩』不是 meta_config 里的指标名（8 大指标里叫『销售额』）→ 检索与路由都要能靠语义映射到销售额；日期口径仍须显式落在国庆档"
+    },
+    {
+      "id": "F1-11-flow-record-lookup",
+      "query": "查一下 RK2026101301 这张单的出入库记录",
+      "capability": "dataquery",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_sql_tables": ["fact_inventory_flow"],
+      "expect_sql_not_tables": ["fact_sales"],
+      "notes": "单据流水查询：必须查流水表、不许串到销售表。风险已知：fact_inventory_flow 若未进 meta 检索的表集合，SQL 会生成失败——这正是本场通过线留 0.1 余量的原因；首跑后若确为基础设施缺口，记录在报告而不是删用例"
+    },
+    {
+      "id": "F1-12-write-intent-slots",
+      "query": "入库 15241012-05-43 5 件",
+      "capability": "inventory_write",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "expect_pending_slots": { "direction": "in", "qty": 5 },
+      "notes": "写意图识别：不含『登记/出入库』等显式词，只靠『入库』动作 + SKU + 数量 → 必须进入库存写流程并保留已填槽位（路由对抗的另一半：不是所有含数字的问句都该走问数）"
+    }
+  ]
+}

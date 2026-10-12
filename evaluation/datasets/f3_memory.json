@@ -1,0 +1,123 @@
+{
+  "dataset_id": "f3_memory",
+  "version": "1.0",
+  "scene": "F3 记忆双层场",
+  "pass_line": 0.8,
+  "description": "F3 记忆双层场（口径 2026-10-12）：验证个人层/门店层写入、门禁降级、跨会话回忆注入、拒记（经营数据与猜测不得落库）。运行须知：必须带 --features memory.long_term=true（否则记忆用例整体跳过）。口径纪律：①每条用例必须给 staff_id（身份决定层级：门店层写入需 replenish.store，缺权限则降级 personal；owner_id 取 staff_id）——缺身份会把『评测没给身份』误判成『提取器写错层』；②层级断言只用 personal/store 两个字面量；③回忆类用例的 expected_recall 分两层判定（落盘层 fresh store + 输出层 probe 回答），两层都要过；④F3-09 是跨员工隔离用例，依赖 F3-01 已把 S001 个人层条目落盘（依赖执行顺序与磁盘记忆文件，被 --limit/子集运行破坏时会失真）；⑤本场通过线 0.8：记忆由 LLM 提取，允许 2 例失败。依赖 dim_staff（S001/T001/K001/M001）。",
+  "defaults": { "match_mode": "exact", "k": 5 },
+  "cases": [
+    {
+      "id": "F3-01-staff-personal-write",
+      "query": "我负责哪个品类的补货管理？",
+      "capability": "default",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "memory_setup": { "setup_runs": ["我负责鞋类区域的日常补货管理"], "expected_recall": ["鞋类"] },
+      "expect_memory_scope": "personal",
+      "expect_memory_injected": true,
+      "notes": "个人层写入 + 跨会话回忆：S001（STAFF）自述职责 → 个人层、owner=S001；probe 用全新 thread_id（跨会话）与全新 store 实例（跨实例）双重验证。F3-09 隔离用例依赖本用例已落盘"
+    },
+    {
+      "id": "F3-02-manager-store-write",
+      "query": "我们店盘点有什么规矩？",
+      "capability": "default",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "memory_setup": { "setup_runs": ["我们店的规矩是鞋类每周盘点一次"], "expected_recall": ["每周盘点"] },
+      "expect_memory_scope": "store",
+      "notes": "门店层写入：M001（MANAGER 持 replenish.store）说『我们店的规矩…』→ 落 store 层（全店可见）。同一句话在两种身份下落到两层，是本场核心区分度"
+    },
+    {
+      "id": "F3-03-temp-store-downgrade",
+      "query": "我们店盘点有什么规矩？",
+      "capability": "default",
+      "staff_id": "T001",
+      "enabled": true,
+      "expected": {},
+      "memory_setup": { "setup_runs": ["我们店的规矩是鞋类每周盘点一次"], "expected_recall": ["每周盘点"] },
+      "expect_memory_scope": "personal",
+      "notes": "门禁降级：T001（TEMP）无 replenish.store → 同一句话不得写进门店层，必须降级为 personal（owner=T001）。降级若失效，任何临时工都能给全店改规矩"
+    },
+    {
+      "id": "F3-04-keeper-store-write",
+      "query": "补货要留多少安全库存？",
+      "capability": "default",
+      "staff_id": "K001",
+      "enabled": true,
+      "expected": {},
+      "memory_setup": { "setup_runs": ["我们店补货要留 10% 的安全库存"], "expected_recall": ["10%"] },
+      "expect_memory_scope": "store",
+      "notes": "门店层写入（第二个有权角色）：K001（KEEPER 持 replenish.store）→ store 层；与 F3-03 构成『同事不同权』对照"
+    },
+    {
+      "id": "F3-05-refuse-business-data",
+      "query": "这个记一下",
+      "capability": "default",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "memory_setup": { "setup_runs": ["昨天我们店卖了 5 万块，你记住"], "expected_recall": [] },
+      "expect_zero_extract": true,
+      "notes": "拒记（经营数据）：销售数字是会随库变化的**事实**，必须查库而非记忆化（记忆化 = 给未来埋一条过期数字，之后每个员工都被注入『昨天卖了 5 万』）"
+    },
+    {
+      "id": "F3-06-refuse-inference",
+      "query": "这个也记一下",
+      "capability": "default",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "memory_setup": { "setup_runs": ["你猜猜我们店的主要客群是女性吧，记下来"], "expected_recall": [] },
+      "expect_zero_extract": true,
+      "notes": "拒记（猜测/推断）：『你猜』类未证实结论不得成为长期记忆（断言 memory_added=0）"
+    },
+    {
+      "id": "F3-07-store-rule-recall",
+      "query": "报损流程有什么要求？",
+      "capability": "default",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "memory_setup": { "setup_runs": ["我们店的报损流程：先拍照留证再报损"], "expected_recall": ["拍照"] },
+      "expect_memory_scope": "store",
+      "expect_memory_injected": true,
+      "notes": "门店规则回忆（跨会话）：probe 问句与 setup 措辞不同（『报损流程有什么要求』vs『报损流程：先拍照…』）→ 检索靠语义而非字面，同时验证 store 层条目对所有员工可见"
+    },
+    {
+      "id": "F3-08-personal-recall-business-positioning",
+      "query": "我们店主要做哪类顾客的生意？",
+      "capability": "default",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "memory_setup": { "setup_runs": ["我们店主要做年轻女性顾客的生意"], "expected_recall": ["女性"] },
+      "expect_memory_scope": "store",
+      "expect_memory_injected": true,
+      "notes": "经营定位类记忆（与拒记用例的边界）：经营**定位/偏好**属可记忆的长期知识，与 F3-05 的『昨天卖了多少』这类事实数据形成对照。S001 无 replenish.store → 该条落 personal（个人层记忆同样要能回忆起来）"
+    },
+    {
+      "id": "F3-09-other-employee-no-leak",
+      "query": "陈明负责哪个品类的补货管理？",
+      "capability": "default",
+      "staff_id": "T001",
+      "enabled": true,
+      "expected": {},
+      "memory_setup": { "setup_runs": [], "expected_recall": [] },
+      "expect_memory_injected": false,
+      "notes": "跨员工隔离（待首跑校准）：F3-01 已把『鞋类补货管理』写入 S001 个人层，本轮以 T001 身份问同一内容 → 可见性过滤必须挡住，不得注入他人个人层条目。风险已知：若检索召回了 T001 自己的条目（F3-03 的盘点规矩）会造成假红，首跑后按实际注入内容决定是否改为分层断言"
+    },
+    {
+      "id": "F3-10-memory-not-hijack-routing",
+      "query": "国庆期间销售额是多少？",
+      "capability": "dataquery",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "memory_setup": { "setup_runs": ["我负责鞋类区域的日常补货管理"], "expected_recall": [] },
+      "expect_sql_tables": ["fact_sales"],
+      "notes": "记忆不得劫持路由：注入了『我负责鞋类』的个人记忆后，问销售数据仍必须走 dataquery 查库（记忆是上下文，不是答案来源）"
+    }
+  ]
+}

@@ -6,7 +6,7 @@ replenish 能力处理节点（2.0 S3b）—— 补货计划：固化算法 + LL
 让 LLM 每次现场发明补货 SQL，同一问题会算出不同数字（决策场景不可接受，
 评估也无法打 golden 答案）；而补货不需要语义召回（表与口径固定）、不需要
 校验修正闭环（SQL 是参数化模板）。因此采用第三种能力形状：单节点三步流水：
-  ① 取数：固定参数化 SQL（近 7 天日均销量 / 最新快照可用库存 / 品类策略 / SKU 属性）
+  ① 取数：固定参数化 SQL（近 window 天日均销量 / 最新快照可用库存 / 品类策略 / SKU 属性）
   ② 计算：纯 Python 固化公式（GWT 单测覆盖：tests/test_replenish_algo.py）
   ③ 解释：LLM 只做自然语言包装（禁止改数字），SSE 发 replenish 结构化事件
        + explanation 文本兜底（旧渲染器不至于空白）。
@@ -15,7 +15,9 @@ replenish 能力处理节点（2.0 S3b）—— 补货计划：固化算法 + LL
   目标库存   = ceil(日均销量 × (覆盖天数 + 安全天数))
   建议补货量 = max(0, 目标库存 − 可用库存 − 在途)
   在途 v1 恒 0（数据集无在途单据类型，减项为 warehouse_replenish 扩展保留）
-  日均销量   = 近 window 天销量 / window（数据集即国庆 7 天，含假期高基线——演示口径）
+  日均销量   = 全窗口销量 / window，window = MAX(date_id) − MIN(date_id) + 1
+               （动态：随 daily_append 每天增长，当前实测 9 天；查跨度失败回落 7——
+                含假期高基线，演示口径）
 输出：仅建议量 > 0 的 SKU，按断货倒计时（可用库存/日均销量）升序——越快断货越靠前。
 品类范围：本轮查询提及的品类（鞋类/服装类/配件类）优先；未提及则继承对话
 最近一轮（多轮省略句），仍无则全店。
@@ -123,7 +125,7 @@ async def replenish_plan(state: DataAgentState, runtime: Runtime[DataAgentContex
 
     try:
         # ---- ① 取数：固定参数化 SQL（补货不做语义召回，表与口径固定）----
-        # 近期销量（件/SKU）：窗口 = 数据集日期跨度（国庆 7 天）
+        # 近期销量（件/SKU）：窗口 = 库内实际日期跨度（动态，随 daily_append 增长）
         sales_rows = await dw.run(
             "SELECT sku_id, SUM(quantity) AS sold FROM fact_sales GROUP BY sku_id",
             timeout_ms=15000, max_rows=5000,

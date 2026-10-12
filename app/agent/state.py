@@ -51,6 +51,10 @@ class DateInfoState(TypedDict):
     date: str
     weekday: str
     quarter: str
+    # [S0 持续运营] 数据可用区间（如 "2026-10-01 ~ 2026-10-09"）——由 add_extra_context
+    # 查 fact_sales 的 MIN/MAX(date_id) 动态得出。daily_append 每天追加数据，窗口会增长，
+    # 因此提示词里不得再写死日期段，一律引用本字段；查询失败时降级为空串（不阻断主链路）。
+    data_range: str
 
 
 class DBInfoState(TypedDict):
@@ -115,3 +119,13 @@ class DataAgentState(TypedDict):
     # [规则3 留档] S3b 设计拍板：inventory 复用问数链路（结果走 result 字段，不设
     # inventory_rows——原预留字段删除）；replenish 是固化算法单节点，结构化建议写这里
     replenish_plan: list[dict]  # 补货建议（replenish_plan 节点写入：固化算法输出 + 参数来源）
+
+    # ==== R2 可测性字段（评测机制断言用）====
+    # [R2 断言扩展] 这三个值原先只存在于节点内部局部变量里，评测无从断言"机制是否真生效"。
+    # 落 state 后：F2 断言继承条件块内容（expect_inherited）、F3 断言记忆真的进了提示词
+    # （expect_memory_injected）、F6 断言 brief 生效后历史区字符数下降（expect_history_len_le）。
+    # 三者都是**诊断输出**：不参与 SQL 生成逻辑，只在节点尾部随 return 写回；
+    # 提示词内容一字不变（缓存前缀与动态尾部均按原样渲染）→ 对在线行为零影响。
+    inherited_conditions: str   # generate_sql 注入的继承条件块（condition_extractor 产物）
+    memory_block: str           # 注入提示词的记忆块（空串 = 无记忆注入）
+    history_chars: int          # 最近一次进模型的历史区字符数（继承块 / 渲染后历史）

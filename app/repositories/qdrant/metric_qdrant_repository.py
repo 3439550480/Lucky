@@ -48,6 +48,19 @@ class MetricQdrantRepository:
             )
             return [MetricInfo(**point.payload) for point in result.points]
 
+    async def recreate(self):
+        """重建集合：先删除已有集合，再按当前维度创建
+
+        谁调用：MetaKnowledgeService._save_metrics_to_qdrant（构建知识库时）
+        为什么必须删：与字段集合同因——历史版本用 uuid4 随机 id 且只 upsert 不删除，
+        实测指标集合攒到 164 点（8 指标 × 约 2 语义文本 ≈ 16 点/次 × 约 10 次构建）。
+        重复点会占满 search(limit=20) 的额度：实测搜「可用库存」20 个命中里
+        只有 1 个不同指标、搜「销量」只有 4 个 → 期望指标被挤出 top-5。
+        """
+        if await self.client.collection_exists(self.collection_name):
+            await self.client.delete_collection(self.collection_name)
+        await self.ensure_collection()
+
     async def upsert(
         self,
         ids: list[str],

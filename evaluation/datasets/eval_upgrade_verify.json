@@ -1,0 +1,141 @@
+{
+  "dataset_id": "eval_upgrade_verify",
+  "version": "1.0",
+  "description": "R1–R5 评测升级自检场（口径 2026-10-12）。11 例只验证「机制是否真的在评测链路里生效」，不含 golden_sql、不参与能力基线（S3 的 F1–F9 才是基线）：身份注入与登录门禁（R1）、权限矩阵断言（R2）、流程槽位/确认门 + 写库流水与经办人（R3）、超长会话历史累积（R4）、记忆落库 scope 与门店层门禁降级（R5）。数据依赖：dim_staff（S001/M001/T001/S007/T005）、fact_inventory_flow（RK2026101301/02/03 未占用）、data/memory 落盘文件。",
+  "defaults": { "match_mode": "exact", "k": 5 },
+  "cases": [
+    {
+      "id": "R1-01-temp-write-denied",
+      "query": "入库 RK2026101303 15241012-05-43 5",
+      "capability": "inventory",
+      "staff_id": "T001",
+      "enabled": true,
+      "expected": {},
+      "expect_permission_denied": "inventory.write",
+      "expect_pending_slots": {},
+      "notes": "R1+R2 权限矩阵：TEMP 只有 inventory.read + dataquery.query，flow_guard 必须在建立 pending_action 之前就拒绝 inventory.write；同时验证拒绝路径不残留流程状态"
+    },
+    {
+      "id": "R1-02-disabled-staff-rejected",
+      "query": "你好",
+      "capability": "default",
+      "staff_id": "S007",
+      "enabled": true,
+      "expected": {},
+      "expect_login_rejected": "disabled",
+      "notes": "R1 登录门禁：S007（dim_staff.status=停用）不得进图——runner 走与在线登录同源的 check_validity，拒绝原因码必须是 disabled（若评测里静默放行，F4 会假通过）"
+    },
+    {
+      "id": "R1-03-expired-staff-rejected",
+      "query": "你好",
+      "capability": "default",
+      "staff_id": "T005",
+      "enabled": true,
+      "expected": {},
+      "expect_login_rejected": "expired",
+      "notes": "R1 登录门禁：T005（valid_to=2026-08-31 已过期）原因码必须是 expired。与 R1-01 的 T001（valid_to=2026-10-12，当天仍有效）构成有效期边界口径的回归锚点"
+    },
+    {
+      "id": "R3-01-confirm-writes-flow",
+      "query": "就按这个执行吧",
+      "capability": "inventory_write",
+      "staff_id": "S001",
+      "enabled": true,
+      "dialogue": ["入库 RK2026101301 15241012-05-43 5", "就按这个执行吧"],
+      "confirm_sequence": [null, "accept"],
+      "expected": {},
+      "expect_pending_slots": {},
+      "expect_flow_doc": { "doc_no": "RK2026101301", "committed": true },
+      "notes": "R3 确认门写库：末轮注入 confirm_decision=accept（runner 映射为流程机口径 confirm）→ commit_flow。第二句刻意不含任何确认词，证明确实是结构化通道生效而非文本命中。ground truth 取 fact_inventory_flow：单据 RK2026101301 必须落流水且 operator_id=S001（身份从登录贯穿到写库）"
+    },
+    {
+      "id": "R3-02-cancel-no-write",
+      "query": "我再核对一下单号再定",
+      "capability": "inventory_write",
+      "staff_id": "S001",
+      "enabled": true,
+      "dialogue": ["出库 RK2026101302 15241012-05-43 3", "我再核对一下单号再定"],
+      "confirm_sequence": [null, "cancel"],
+      "expected": {},
+      "expect_pending_slots": {},
+      "expect_flow_doc": { "doc_no": "RK2026101302", "committed": false },
+      "notes": "R3 取消分支：结构化 cancel → 清空 pending_action 且**不得**落流水。state 里「提交成功」与「被取消」都是 pending_action=None，只能靠流水表区分，故 committed=false 断言的是「真的没记账」"
+    },
+    {
+      "id": "R3-03-missing-doc-keeps-pending",
+      "query": "出库 15241012-05-43 3",
+      "capability": "inventory_write",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "expect_pending_slots": { "direction": "out", "sku_id": "15241012-05-43", "qty": 3 },
+      "notes": "R3 槽位驱动推进：缺 doc_no → 校验已填槽位后停在原步（不写库、不推确认卡），已填槽位必须保留在 state 供下一轮复用（compare 槽位表驱动的核心行为）"
+    },
+    {
+      "id": "R4-01-filler-history-growth",
+      "query": "你能帮我做什么",
+      "capability": "default",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "session_filler": {
+        "turns": 24,
+        "pool": ["你好", "你能帮我做什么", "刚才说的记住了吗", "谢谢，辛苦了"]
+      },
+      "expect_history_len_le": 5000,
+      "notes": "R4 超长会话（F6）：同 thread_id 先灌 24 轮填充对话再问目标句。判定=与 R4-02 基线比较报告里的 history_chars（累积生效则远大于基线；若 runner 每轮入口把 messages 冲空，两者会几乎相同 → 假通过）。上限断言同时覆盖 history_max_tokens 预算守卫"
+    },
+    {
+      "id": "R4-02-baseline-no-filler",
+      "query": "你能帮我做什么",
+      "capability": "default",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "expect_history_len_le": 5000,
+      "notes": "R4 对照基线：同问句同身份、不灌填充轮（首轮无历史）。它与 R4-01 的 history_chars 差值就是「填充会话真的在累积轨迹」的证据，而不是阈值本身"
+    },
+    {
+      "id": "R5-01-personal-scope-write",
+      "query": "我主要负责哪块业务",
+      "capability": "default",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "memory_setup": {
+        "setup_runs": ["我主要负责鞋类区域的日常补货管理"],
+        "expected_recall": ["鞋类"]
+      },
+      "expect_memory_scope": "personal",
+      "notes": "R5 落库（个人层）：S001 自述职责 → 提取器 scope=personal 且 owner_id=S001。setup/probe 必须同身份——缺身份时 owner_id 变空串，会把「评测没给身份」误判成「提取器写错层」。报告 actual.owners 应含 S001"
+    },
+    {
+      "id": "R5-02-store-rule-downgraded",
+      "query": "我们店的规矩是什么",
+      "capability": "default",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "memory_setup": {
+        "setup_runs": ["我们店的规矩是鞋类每周盘一次库存"],
+        "expected_recall": ["每周"]
+      },
+      "expect_memory_scope": "personal",
+      "notes": "R5 门店层写入门禁降级：S001（STAFF，无 replenish.store）说门店规则 → 不得落 store 层，降级 personal 且内容不丢。与 R5-03（M001 说同类门店规则 → store）构成同构对照，两条一起才证明门禁是按身份判的"
+    },
+    {
+      "id": "R5-03-store-rule-allowed",
+      "query": "我们店的规定是什么",
+      "capability": "default",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "memory_setup": {
+        "setup_runs": ["我们店的规定是盘点差异超过三件要当天上报"],
+        "expected_recall": ["盘点"]
+      },
+      "expect_memory_scope": "store",
+      "notes": "R5 门店层直通：M001（MANAGER，有 replenish.store）说门店规则 → scope=store 且 owner_id=ST001（门店层归属门店而非个人）"
+    }
+  ]
+}

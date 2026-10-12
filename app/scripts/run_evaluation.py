@@ -38,6 +38,18 @@ def _pct(v) -> str:
 def _print_summary(aggregate: dict) -> None:
     """控制台指标摘要表（与 JSON/Markdown 同源的 aggregate，口径一致）"""
     q, cost = aggregate["quality"], aggregate["cost"]
+    # [S3 分场] 场判定先行：跑完第一眼看的就是"这场过没过"
+    sc = aggregate.get("scene")
+    if sc:
+        verdict_text = ("达标" if sc["verdict"] else
+                        ("未达标" if sc["verdict"] is False else
+                         ("全部跳过" if sc.get("skipped") and not sc.get("counted") else "未设线")))
+        skip_note = f"  跳过 {sc['skipped']}" if sc.get("skipped") else ""
+        print("\n----- 场判定 -----")
+        print(f"  {sc['scene']}: 用例通过 {sc['passed']}/{sc['counted']} "
+              f"({_pct(sc['case_pass_rate'])})  通过线 {_pct(sc['pass_line'])}  {verdict_text}{skip_note}")
+        for c in sc["failed_cases"]:
+            print(f"    - {c['id']}：{c['reason']}")
     print("\n----- 质量指标 -----")
     if not q["retrieval"].get("disabled"):
         for ch, m in q["retrieval"].items():
@@ -50,6 +62,10 @@ def _print_summary(aggregate: dict) -> None:
     if not q["sql"].get("disabled"):
         print(f"  SQL 可执行率: {_pct(q['sql'].get('executability'))}  "
               f"结果正确性: {_pct(q['sql'].get('correctness'))}")
+    if not q["assertions"].get("disabled"):
+        a = q["assertions"]
+        print(f"  机制断言: {_pct(a.get('pass_rate'))} "
+              f"(通过/失败/未评估 = {a.get('passed')}/{a.get('failed')}/{a.get('unevaluated')})")
     print("----- 成本 -----")
     if not cost.get("disabled"):
         print(f"  总费用: {cost['total_cost']} 元  每问: {cost['avg_cost_per_case']} 元  "
@@ -115,7 +131,7 @@ async def main() -> int:
         "duration_s": round(time.time() - started, 1),
         "git_commit": _git_commit(),
     }
-    aggregate = compute_aggregate(results, meta)
+    aggregate = compute_aggregate(results, meta, dataset)     # [S3 分场] 场判定需要 dataset
     json_path = render_json(results, dataset, meta, aggregate)
     md_path = render_markdown(results, dataset, meta, aggregate)
 

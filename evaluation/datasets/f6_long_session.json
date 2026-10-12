@@ -1,0 +1,59 @@
+{
+  "dataset_id": "f6_long_session",
+  "version": "1.0",
+  "scene": "F6 长会话压缩场",
+  "pass_line": 0.75,
+  "description": "F6 长会话压缩场（口径 2026-10-12）：验证超长会话（session_filler 灌轮次）下①历史区预算守卫、②正确性不降、③路由不串台。运行须知：预算阈值 = app_config.session.history_max_tokens = 4000（app/agent/session/history_provider.py:38-40），故上限断言一律 4000——它是守卫裁掉的**硬上限**，不是经验值。口径纪律：①history_chars 只在 default 能力路径反映真实渲染历史（dataquery 路径该字段 = 继承块长度，见 generate_sql），故上限断言只挂在 default 用例上，dataquery 用例改断正确性；②filler 池刻意用短问句（每轮都真跑一遍图，池子越长成本越高）；③F6-02/F6-03 是同一道题的『长会话 vs 短会话』对照对，golden 与 F8 场基线同源（题库 Q1：实收 21,671,125.20 / 吊牌 41,962,146 → 0.5164）；④本场通过线 0.75：长上下文是已知弱项，4 例允许 1 例失败。",
+  "defaults": { "match_mode": "exact", "k": 5 },
+  "cases": [
+    {
+      "id": "F6-01-history-budget-long-session",
+      "query": "你是谁？",
+      "capability": "default",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "session_filler": { "turns": 24,
+                          "pool": ["你好", "现在鞋类还有多少库存？", "国庆期间卖了多少钱？", "谢谢"] },
+      "expect_history_len_le": 4000,
+      "notes": "预算守卫：灌满 24 轮后进模型的历史区字符数不得超过 history_max_tokens=4000；超了说明硬保护没生效（静默降级 + 每轮缓存失效，成本与延迟都会失控）。此用例断言的是**上限**——短会话天然通过，故必须靠 filler 才有区分度"
+    },
+    {
+      "id": "F6-02-long-session-accuracy",
+      "query": "国庆 7 天整体的平均折扣率是多少？",
+      "capability": "dataquery",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "session_filler": { "turns": 12,
+                          "pool": ["你好", "现在鞋类还有多少库存？", "国庆期间卖了多少钱？", "谢谢"] },
+      "golden_sql": "SELECT ROUND(SUM(actual_amount) / SUM(list_price * quantity), 4) AS discount_rate FROM fact_sales WHERE date_id BETWEEN 20261001 AND 20261007",
+      "expect_sql_tables": ["fact_sales"],
+      "notes": "长会话正确性（12 轮 filler）：口径=实收/吊牌额，实测 0.5164。与 F6-03 同题对照 → 用来回答『长上下文会不会把口径问飘』（金额加权 vs 逐行平均是最常见的飘法）"
+    },
+    {
+      "id": "F6-03-short-session-baseline",
+      "query": "国庆 7 天整体的平均折扣率是多少？",
+      "capability": "dataquery",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "golden_sql": "SELECT ROUND(SUM(actual_amount) / SUM(list_price * quantity), 4) AS discount_rate FROM fact_sales WHERE date_id BETWEEN 20261001 AND 20261007",
+      "expect_sql_tables": ["fact_sales"],
+      "notes": "短会话基线（无 filler）：与 F6-02 完全同题同 golden，唯一变量是历史区长度 → 两条一起看才能判『长会话是否导致正确性下降』（单看长会话用例无法区分模型能力波动）"
+    },
+    {
+      "id": "F6-04-long-session-no-crosstalk",
+      "query": "现在鞋类可用库存还有多少？",
+      "capability": "inventory",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "session_filler": { "turns": 24,
+                          "pool": ["你好", "现在鞋类还有多少库存？", "国庆期间卖了多少钱？", "断码的还多吗？", "谢谢"] },
+      "expect_sql_tables": ["dim_inventory_snapshot"],
+      "expect_sql_not_tables": ["fact_sales"],
+      "notes": "长会话不串台：24 轮里混入过销售类问句，末轮问库存必须仍落快照表；『现在』口径在 golden 里用 MAX(snapshot_date) 表达（当前 20261009 → 全店 256,011，鞋类为其中一部分）"
+    }
+  ]
+}

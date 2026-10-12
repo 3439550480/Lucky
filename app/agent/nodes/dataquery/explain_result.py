@@ -39,7 +39,7 @@ async def explain_result(state: DataAgentState, runtime: Runtime[DataAgentContex
         from app.agent.session.prefix import build_system_prefix
         prompt = PromptTemplate(
             template=load_prompt("explain_result"),
-            input_variables=["system_prefix", "conversation_history",
+            input_variables=["system_prefix", "conversation_history", "date_info",
                              "query", "sql", "result", "metric_infos"],
         )
         chain = prompt | llm | StrOutputParser()
@@ -48,6 +48,10 @@ async def explain_result(state: DataAgentState, runtime: Runtime[DataAgentContex
             # [2.0 上下文策略] 历史渲染统一走 render_history（剥离元数据）
             "conversation_history": render_history(
                 get_conversation_history(state), "yaml"),
+            # [S0 持续运营] 解释层也要知道数据边界——结果为空/区间外时才能说明
+            # 可用区间（原来模板里写死 2026-10-01~10-07，库增长后会答错边界）
+            "date_info": yaml.dump(state.get("date_info") or {}, allow_unicode=True,
+                                   sort_keys=False),
             "query": query,
             "sql": sql,
             "result": result_yaml,

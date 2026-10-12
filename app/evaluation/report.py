@@ -12,6 +12,7 @@ from pathlib import Path
 
 from app.conf.app_config import app_config
 from app.core.log import logger
+from app.evaluation.assertions import aggregate_assertions
 from app.evaluation.cost_metrics import aggregate_costs, compute_case_cost
 from app.evaluation.intent_metrics import compute_intent_metrics
 from app.evaluation.retrieval_metrics import compute_retrieval_metrics
@@ -45,7 +46,66 @@ def _fmt(v, pct: bool = False) -> str:
     return str(v)
 
 
-def compute_aggregate(results: list[CaseResult], meta: dict) -> dict:
+def case_verdict(result: CaseResult) -> tuple[bool, str]:
+    """[S3 分场] 单用例通过判定（场通过率的分子口径）
+
+    谁调用：compute_scene_verdict
+    设计 why：场通过线需要"用例是否通过"的统一口径，而它不等于"图跑通"：
+    ① 有失败机制断言 → 不通过（机制断言是本次升级的硬门）；
+    ② status == ok → 通过（未声明断言的普通用例按"链路跑通"计，正确性另有 SQL 指标管）；
+    ③ status != ok 但有断言被判为真 → 通过：拒绝路径（F4 登录即拒 / 权限拒绝）在 runner 里
+       本就表现为 graph_error，一律算失败会让整整一类用例永远拉低通过率（假失败）。
+
+    示例：case_verdict(CaseResult(status="graph_error", error="LoginRejected: disabled",
+                                  assertions=[{"key": "expect_login_rejected", "passed": True}]))
+          → (True, "")
+    """
+    rows = result.assertions or []
+    fails = [r["key"] for r in rows if r["passed"] is False]
+    if fails:
+        return False, "机制断言失败：" + ", ".join(fails)
+    if result.status == "ok":
+        return True, ""
+    if any(r["passed"] is True for r in rows):          # 拒绝路径：断言即证据
+        return True, ""
+    return False, result.error or result.status
+
+
+def compute_scene_verdict(results: list[CaseResult], dataset) -> dict:
+    """[S3 分场] 场判定：用例通过率对照本场通过线（每场独立数据集、独立通过线）
+
+    谁调用：compute_aggregate → 报告「场判定」节 + CLI 控制台摘要
+    设计 why：方案把"33 例单一大场"拆成八场，前提是每场能独立判达标——否则"机制有没有
+    生效"仍然只能靠人读表格。pass_line 缺省 None = 不判达标（存量数据集结构不变）。
+    口径：用例通过 = 图跑通且无失败机制断言（拒绝路径须有断言作证，见 case_verdict）。
+    跳过例（status="skipped"：如 F8 记忆组在 --features memory.long_term=false 时）不进分子分母——
+    "没跑"与"没过"是两回事，否则关闭记忆前跑记忆组会被判成未达标（假失败）。
+
+    示例：compute_scene_verdict([r1, r2], ds)        # ds.scene="F4 权限矩阵场", ds.pass_line=0.9
+          → {"scene": "F4 权限矩阵场", "total": 2, "counted": 2, "skipped": 0, "passed": 2,
+             "case_pass_rate": 1.0, "pass_line": 0.9, "verdict": True, "failed_cases": []}
+    """
+    cases_passed, skipped, failed_cases = 0, 0, []
+    for r in results:
+        if r.status == "skipped":                        # 未跑（依赖开关未开）→ 不计入通过率
+            skipped += 1
+            continue
+        passed, reason = case_verdict(r)
+        if passed:
+            cases_passed += 1
+        else:
+            failed_cases.append({"id": r.case.id, "reason": reason})
+    counted = len(results) - skipped
+    rate = (cases_passed / counted) if counted else None  # 无有效例 → None（不输出 0 分）
+    line = getattr(dataset, "pass_line", None)
+    verdict = None if (line is None or rate is None) else rate >= line
+    return {"scene": getattr(dataset, "scene", "") or dataset.dataset_id,
+            "total": len(results), "counted": counted, "skipped": skipped, "passed": cases_passed,
+            "case_pass_rate": rate, "pass_line": line, "verdict": verdict,
+            "failed_cases": failed_cases[:20]}
+
+
+def compute_aggregate(results: list[CaseResult], meta: dict, dataset=None) -> dict:
     """聚合全部指标（JSON/Markdown/控制台三方共用同一份结果，口径绝不两算）。
     evaluation.* 开关关闭的区输出 {"disabled": true}（§5.1：不计算不呈现）"""
     ev = app_config.features.evaluation
@@ -99,6 +159,14 @@ def compute_aggregate(results: list[CaseResult], meta: dict) -> dict:
         quality["memory"] = compute_memory_metrics(mem_rows)
     else:
         quality["memory"] = {"disabled": True}
+    # ---- 机制断言（R2 断言扩展）----
+    # 注意分母含 graph_error 用例：权限矩阵/越权拒绝类断言本就发生在"非 ok"路径上，
+    # 只统计 ok 会把整整一类用例（F4）漏掉
+    if ev.assertion_metrics:
+        quality["assertions"] = aggregate_assertions(
+            [{"assertions": r.assertions} for r in results])
+    else:
+        quality["assertions"] = {"disabled": True}
     # ---- 成本 ----
     if ev.cost_metrics:
         provider_cfg = app_config.llm.providers.get(meta["provider"], {})
@@ -109,7 +177,9 @@ def compute_aggregate(results: list[CaseResult], meta: dict) -> dict:
     else:
         cost = {"disabled": True,
                 "note": "token 明细仍在 cases 中（tracker 不受开关影响，可回算，§5.1）"}
-    return {"quality": quality, "cost": cost}
+    return {"quality": quality, "cost": cost,
+            # [S3 分场] 场判定；dataset 缺省 None → null（老调用方/老报告结构不变）
+            "scene": compute_scene_verdict(results, dataset) if dataset is not None else None}
 
 
 def _cases_detail(results: list[CaseResult], meta: dict) -> list[dict]:
@@ -134,6 +204,10 @@ def _cases_detail(results: list[CaseResult], meta: dict) -> list[dict]:
                 },
                 "retry_count": fs.get("retry_count", 0),
                 "memory_result": r.memory_result,
+                # [R2] 机制诊断字段：断言"实际值"留档，排查机制问题无需重跑
+                "inherited_conditions": fs.get("inherited_conditions"),
+                "memory_block_chars": len(fs.get("memory_block") or ""),
+                "history_chars": fs.get("history_chars"),
             })
         if r.tracker_summary:
             item["cost"] = compute_case_cost(r.tracker_records, r.tracker_summary,
@@ -146,6 +220,8 @@ def _cases_detail(results: list[CaseResult], meta: dict) -> list[dict]:
             item["retries"] = smi.get("retry_count", 0)
             if smi.get("has_golden") and smi.get("executed") and smi.get("golden_rows") is not None:
                 item["sql_correct"] = results_equal(smi.get("golden_rows"), smi.get("actual_rows"))
+        # [R2] 机制断言明细（用例未声明 expect_* → 空列表；passed=None 表示未评估）
+        item["assertions"] = r.assertions
         out.append(item)
     return out
 
@@ -178,6 +254,20 @@ def render_markdown(results: list[CaseResult], dataset, meta: dict, aggregate: d
               f"| 强制项 | {json.dumps(meta.get('forced', {}), ensure_ascii=False)} |",
               f"| git commit | {meta.get('git_commit') or '—'} |",
               f"| 耗时 | {meta['duration_s']}s |", ""]
+
+    # ---- 1.5 [S3 分场] 场判定（每场独立通过线；未设线 → 不判达标）----
+    sc = aggregate.get("scene")
+    if sc:
+        verdict_text = ("达标" if sc["verdict"] else
+                        ("未达标" if sc["verdict"] is False else
+                         ("全部跳过" if sc.get("skipped") and not sc.get("counted") else "未设线")))
+        counted_note = f"（有效 {sc['counted']}，跳过 {sc['skipped']}）" if sc.get("skipped") else ""
+        lines += ["## 场判定", "",
+                  "| 场 | 用例通过 | 用例通过率 | 通过线 | 达标 |", "|---|---|---|---|---|",
+                  f"| {sc['scene']} | {sc['passed']}/{sc['counted']}{counted_note} | "
+                  f"{_fmt(sc['case_pass_rate'], True)} | {_fmt(sc['pass_line'], True)} | {verdict_text} |", ""]
+        if sc["failed_cases"]:
+            lines += ["不通过用例："] + [f"- `{c['id']}`：{c['reason']}" for c in sc["failed_cases"]] + [""]
 
     # ---- 2. 质量指标 ----
     lines += ["## 质量指标", ""]
@@ -231,6 +321,20 @@ def render_markdown(results: list[CaseResult], dataset, meta: dict, aggregate: d
                   f"可执行率：**{_fmt(sql['executability'], True)}**（support={sql['support_exec']}）　"
                   f"结果正确性：**{_fmt(sql['correctness'], True)}**（support={sql['support_correct']}）　"
                   f"平均重试：{sql['avg_retries']:.2f}", ""]
+    # ---- 机制断言（R2 断言扩展）----
+    asrt = q.get("assertions") or {}
+    if asrt.get("disabled"):
+        lines += ["- 机制断言：disabled"]
+    elif not asrt.get("total"):
+        lines += ["- 机制断言：本数据集未声明 expect_* 字段"]
+    else:
+        lines += [f"### 机制覆盖矩阵（机制断言通过率 {_fmt(asrt['pass_rate'], True)}；"
+                  f"通过/失败/未评估 = {asrt['passed']}/{asrt['failed']}/{asrt['unevaluated']}）", "",
+                  "| 机制（断言字段） | 覆盖用例 | 通过 | 失败 | 未评估 | 通过率 |",
+                  "|---|---|---|---|---|---|"]
+        for key, b in sorted(asrt["by_key"].items()):
+            lines.append(f"| {key} | {b.get('cases', '—')} | {b['passed']} | {b['failed']} | "
+                         f"{b['unevaluated']} | {_fmt(b['pass_rate'], True)} |")
     lines.append("")
 
     # ---- 3. 成本 ----
@@ -252,14 +356,15 @@ def render_markdown(results: list[CaseResult], dataset, meta: dict, aggregate: d
             lines.append(f"| {stage} | {s['calls']} | {s['input_tokens']} | {s['latency_ms']} |")
         lines.append("")
 
-    # ---- 5. 失败清单 ----
-    failures = [r for r in results if r.status != "ok"]
+    # ---- 5. 失败清单（链路失败 + 机制断言失败：机制问题必须能一眼看到）----
     lines += ["## 失败用例", ""]
-    if not failures:
-        lines += ["无"]
-    else:
-        for r in failures:
-            lines.append(f"- `{r.case.id}`：{r.error}")
+    failure_lines = [f"- `{r.case.id}`（{r.status}）：{r.error}"
+                     for r in results if r.status != "ok"]
+    failure_lines += [f"- `{r.case.id}`（机制断言失败）："
+                      f"{', '.join(x['key'] for x in (r.assertions or []) if x['passed'] is False)}"
+                      for r in results if r.status == "ok"
+                      and any(x["passed"] is False for x in (r.assertions or []))]
+    lines += failure_lines or ["无"]
     path.write_text("\n".join(lines), encoding="utf-8")
     logger.info(f"[eval] Markdown 报告已写入 {path}")
     return path

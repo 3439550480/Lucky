@@ -12,10 +12,12 @@ from app.agent.auth.staff_identity import StaffIdentity
 from app.agent.capabilities.registry import registry
 from app.prompt.prompt_loader import load_prompt
 
-PREFIX_VERSION = "v3"          # 前缀协议版本——system_prompt.prompt 内容变更时必须递增
+PREFIX_VERSION = "v4"          # 前缀协议版本——system_prompt.prompt 内容变更时必须递增
                                # [v2] S3 回填：安踏特卖店场景 + 三工具定义（v1 为旧电商场景，已废弃）
                                # [v3] 2.0 上下文策略：规则 1 改写（写操作走流程）+ 能力清单安踏化
                                #      +【当前用户】角色段（按角色渲染）
+                               # [v4] S0 数据窗口收口：删写死的国庆档日期段，数据边界改为
+                               #      引用【今天】段 data_range（持续运营，窗口随 daily_append 增长）
 
 
 def build_system_prefix(staff: StaffIdentity | None = None) -> str:

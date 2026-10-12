@@ -42,6 +42,9 @@ async def default_answer(state: DataAgentState, runtime: Runtime[DataAgentContex
     # step 1: LLM 生成回复 —— 失败降级为静态文案（兜底节点不抛异常）
     # [05 上下文管理] 开关二选一：新 = 三区模板 + history_provider；旧 = legacy 模板 + 内联读取
     fallback_used = False
+    # [R2] 可测性初始化：开关关闭分支不注入记忆块也不渲染历史区，统一补默认值供尾部写回
+    memory_block = ""
+    history_chars = 0
     try:
         if app_config.features.context_management:
             # [06 记忆注入] 动态尾部（对话历史之后，06 §3.4 纪律）；long_term 关闭/无记忆 → 空串
@@ -55,6 +58,9 @@ async def default_answer(state: DataAgentState, runtime: Runtime[DataAgentContex
                         staff=runtime.context.get("staff"))
                 except Exception as e:
                     logger.warning(f"[memory] 记忆注入失败（跳过）: {e}")
+            # [R2] 历史区渲染结果留存：其字符数即 F6「brief 生效」断言的可测口径
+            history_text = render_history(get_conversation_history(state), "text")
+            history_chars = len(history_text)
             chain = PromptTemplate(
                 template=load_prompt("default_answer"),
                 input_variables=["system_prefix", "conversation_history",
@@ -63,8 +69,7 @@ async def default_answer(state: DataAgentState, runtime: Runtime[DataAgentContex
             chain_input = {
                 "system_prefix": build_system_prefix(runtime.context.get("staff")),
                 # [2.0 上下文策略] 历史渲染统一走 render_history（元数据不透模型）
-                "conversation_history": render_history(
-                    get_conversation_history(state), "text"),
+                "conversation_history": history_text,
                 "memory_block": memory_block,
                 "query": query,
             }
@@ -100,4 +105,6 @@ async def default_answer(state: DataAgentState, runtime: Runtime[DataAgentContex
         messages = list(state.get("messages", []))
         messages.append({"role": "user", "content": query})
         messages.append({"role": "assistant", "content": reply})
-    return {"intent_reply": reply, "messages": messages}
+    # [R2] 诊断字段随 return 写回 state（评测断言用）
+    return {"intent_reply": reply, "messages": messages,
+            "memory_block": memory_block, "history_chars": history_chars}

@@ -35,6 +35,20 @@ class ColumnQdrantRepository:
                 ),
             )
 
+    async def recreate(self):
+        """重建集合：先删除已有集合，再按当前维度创建
+
+        谁调用：MetaKnowledgeService._save_column_info_to_qdrant（构建知识库时）
+        为什么必须删而不是只 ensure：向量点的 id 现在由 Service 按「实体 id + 语义文本」
+        确定性生成，upsert 天然幂等；但历史版本用的是 uuid4 随机 id，每次构建都追加一份
+        新点（从不删除）——实测字段集合攒到 1060 点（去重后应约 265 点），
+        重复点会在 search(limit=N) 里占满额度，把其他字段的点挤出召回结果。
+        删除重建 = 索引内容永远与当前 meta_config 一致。
+        """
+        if await self.client.collection_exists(self.collection_name):
+            await self.client.delete_collection(self.collection_name)
+        await self.ensure_collection()
+
     async def upsert(
         self,
         ids: list[str],

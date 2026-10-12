@@ -35,6 +35,23 @@ from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantReposit
 from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
 
 
+def _point_id(entity_id: str, text: str) -> str:
+    """生成确定性向量点 id —— 同一实体 + 同一语义文本永远映射到同一个 id
+
+    谁调用：_save_column_info_to_qdrant / _save_metrics_to_qdrant（构建知识库时）
+    设计 why：原实现用 uuid.uuid4()，每次构建都产生新 id，而 upsert 只增不减 →
+    集合随构建次数线性膨胀（实测字段 1060 点、指标 164 点，各约 10 次构建的残留）。
+    膨胀点会占满 search(limit=N) 的额度，把其他实体的点挤出召回结果。
+    改用 uuid5 定名空间哈希后：同一份 meta_config 重复构建 = 幂等覆盖，集合不膨胀；
+    配合仓储层 recreate()，索引内容与配置严格一致。
+    必须是 UUID 或 uint64 形式（Qdrant 拒绝其他字符串 id），故走 uuid5。
+
+    示例：_point_id("fact_sales.actual_amount", "销售金额")
+          -> "6f0b2c0e-...（同一入参每次结果一致）"
+    """
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{entity_id}::{text}"))
+
+
 class MetaKnowledgeService:
     """负责串联元数据知识库构建流程的应用服务"""
 
@@ -118,25 +135,26 @@ class MetaKnowledgeService:
 
     # ========== 字段向量索引（拆点模式，提高召回率） ==========
     async def _save_column_info_to_qdrant(self, column_infos: list[ColumnInfo]):
-        await self.column_qdrant_repository.ensure_collection()
+        # [S5 索引一致性] 删除重建：保证集合内容 = 本次 meta_config（清掉历史重复点）
+        await self.column_qdrant_repository.recreate()
 
         points: list[dict] = []
         for col in column_infos:
             # 拆成多条语义入口：字段名、描述、别名各为一个点
             # 因为这三个字段是用户自然语言问题中最可能直接提到的内容，而其他字段不适合做语义检索：
             points.append({
-                "id": str(uuid.uuid4()),
+                "id": _point_id(col.id, col.name),
                 "embedding_text": col.name,
                 "payload": asdict(col),
             })
             points.append({
-                "id": str(uuid.uuid4()),
+                "id": _point_id(col.id, col.description),
                 "embedding_text": col.description,
                 "payload": asdict(col),
             })
             for alia in col.alias:
                 points.append({
-                    "id": str(uuid.uuid4()),
+                    "id": _point_id(col.id, alia),
                     "embedding_text": alia,
                     "payload": asdict(col),
                 })
@@ -236,23 +254,24 @@ class MetaKnowledgeService:
 
     # ========== 指标向量索引 ==========
     async def _save_metrics_to_qdrant(self, metric_infos: list[MetricInfo]):
-        await self.metric_qdrant_repository.ensure_collection()
+        # [S5 索引一致性] 删除重建：保证集合内容 = 本次 meta_config（清掉历史重复点）
+        await self.metric_qdrant_repository.recreate()
 
         points = []
         for m in metric_infos:
             points.append({
-                "id": str(uuid.uuid4()),
+                "id": _point_id(m.id, m.name),
                 "embedding_text": m.name,
                 "payload": asdict(m),
             })
             points.append({
-                "id": str(uuid.uuid4()),
+                "id": _point_id(m.id, m.description),
                 "embedding_text": m.description,
                 "payload": asdict(m),
             })
             for alias in m.alias:
                 points.append({
-                    "id": str(uuid.uuid4()),
+                    "id": _point_id(m.id, alias),
                     "embedding_text": alias,
                     "payload": asdict(m),
                 })

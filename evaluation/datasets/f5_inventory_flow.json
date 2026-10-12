@@ -1,0 +1,124 @@
+{
+  "dataset_id": "f5_inventory_flow",
+  "version": "1.0",
+  "scene": "F5 出入库流程场",
+  "pass_line": 1.0,
+  "description": "F5 出入库流程场（口径 2026-10-12）：写库是硬约束——该记的必须真记账、不该记的一行都不许留。覆盖一次给全→确认、结构化取消、缺槽位停在原步、跨轮槽位合并、无确认词不提交、幂等重复提交、超量出库、权限拒绝、非流程能力不残留流程状态。口径纪律：①单据号一律用 RK20261015xx（评测自造、库中未占用；避免与真实业务单/历史评测单 RK2026101201-02 与 RK2026101301-03 撞号导致幂等命中）；②确认走 confirm_sequence 结构化注入（accept/cancel），**不靠**文案命中确认词——故用例里的『嗯』『我再核对一下』故意不含确认词；③committed 断言取 fact_inventory_flow 真实流水，经办人必须等于 staff_id（身份从登录贯穿到写库）；④本场单号每轮会真实落库，重复跑仍成立：写库用例的 staff_id 固定为 S001，二次提交命中幂等 → 流水仍在、经办人不变。",
+  "defaults": { "match_mode": "exact", "k": 5 },
+  "cases": [
+    {
+      "id": "F5-01-confirm-writes-flow",
+      "query": "就按这个执行吧",
+      "capability": "inventory_write",
+      "staff_id": "S001",
+      "enabled": true,
+      "dialogue": ["入库 RK2026101501 15241012-05-43 5", "就按这个执行吧"],
+      "confirm_sequence": [null, "accept"],
+      "expected": {},
+      "expect_pending_slots": {},
+      "expect_flow_doc": { "doc_no": "RK2026101501", "committed": true },
+      "expect_permission_allowed": true,
+      "notes": "正向写库：一次给全四槽位 → 推确认卡 → 结构化 accept → 必须落流水（committed=true 查的是 fact_inventory_flow 真表，不是 state 自述）。末句不含确认词，证明确认来自结构化通道；STAFF 有 inventory.write，顺带验证放行侧"
+    },
+    {
+      "id": "F5-02-cancel-no-write",
+      "query": "我再核对一下单号再定",
+      "capability": "inventory_write",
+      "staff_id": "S001",
+      "enabled": true,
+      "dialogue": ["出库 RK2026101502 15241012-05-43 3", "我再核对一下单号再定"],
+      "confirm_sequence": [null, "cancel"],
+      "expected": {},
+      "expect_pending_slots": {},
+      "expect_flow_doc": { "doc_no": "RK2026101502", "committed": false },
+      "notes": "取消分支：state 里『提交成功』与『被取消』都表现为 pending_action=None，只有流水表能区分 → committed=false 断的是『真没记账』；同时验证取消后不残留可确认的流程状态"
+    },
+    {
+      "id": "F5-03-missing-sku-keeps-pending",
+      "query": "入库 RK2026101503 5 件",
+      "capability": "inventory_write",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "expect_pending_slots": { "direction": "in", "qty": 5 },
+      "notes": "槽位驱动推进：缺 sku_id → 校验已填槽位后**停在原步**（不推确认卡、不写库），已填槽位必须保留在 state 供下一轮复用（只断言 direction/qty，doc_no 是否入槽不设口径）"
+    },
+    {
+      "id": "F5-04-slots-merge-across-turns",
+      "query": "1 件",
+      "capability": "inventory_write",
+      "staff_id": "S001",
+      "enabled": true,
+      "dialogue": ["出库 RK2026101504 15241012-05-43", "1 件"],
+      "expected": {},
+      "expect_pending_slots": { "direction": "out", "doc_no": "RK2026101504",
+                                "sku_id": "15241012-05-43", "qty": 1 },
+      "notes": "跨轮槽位合并：首轮缺数量→次轮补『1 件』，四槽位必须齐全地留在 pending_action（这是流程机 compare 槽位表的核心行为，也是多轮语境里最容易被冲掉的状态）"
+    },
+    {
+      "id": "F5-05-no-confirm-word-no-write",
+      "query": "嗯",
+      "capability": "inventory_write",
+      "staff_id": "S001",
+      "enabled": true,
+      "dialogue": ["入库 RK2026101505 15241012-05-43 1", "嗯"],
+      "confirm_sequence": [null, null],
+      "expected": {},
+      "expect_flow_doc": { "doc_no": "RK2026101505", "committed": false },
+      "notes": "确认门防误触：末轮只有语气词『嗯』且未注入结构化确认 → 不得提交。这条是『确认必须显式』的负样本：若哪天把语气词当确认，本用例立刻变红"
+    },
+    {
+      "id": "F5-06-idempotent-second-submit",
+      "query": "再提交一次 RK2026101506",
+      "capability": "inventory_write",
+      "staff_id": "S001",
+      "enabled": true,
+      "dialogue": ["入库 RK2026101506 15241012-05-43 2", "就按这个执行吧", "再提交一次 RK2026101506"],
+      "confirm_sequence": [null, "accept", null],
+      "expected": {},
+      "expect_flow_doc": { "doc_no": "RK2026101506", "committed": true },
+      "notes": "幂等：同单号二次提交不得重复记账。断言只能证『流水存在且经办人一致』；『没有第 2 条』需按行数复核（SELECT COUNT(*) FROM fact_inventory_flow WHERE doc_no='RK2026101506' 应为 1），首跑时人工核对一次并记入报告"
+    },
+    {
+      "id": "F5-07-over-qty-out-probe",
+      "query": "出库 RK2026101507 15241012-05-43 999999 件",
+      "capability": "inventory_write",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "notes": "超量出库（校准占位，暂不设断言）：期望提示『当前可用 X 件』并拒绝建立可提交流程。当前 state 无『库存不足』显式字段，规则断言无处落；本轮先记录真实行为（是否建 pending、是否拦截提交），首跑后决定补断言还是补 state 字段"
+    },
+    {
+      "id": "F5-08-temp-write-denied",
+      "query": "入库 RK2026101508 15241012-05-43 2",
+      "capability": "inventory_write",
+      "staff_id": "T001",
+      "enabled": true,
+      "expected": {},
+      "expect_permission_denied": "inventory.write",
+      "expect_pending_slots": {},
+      "notes": "写库侧权限格：TEMP 无 inventory.write → 既不许写库也不许留下 pending_action（与 F4-03 同源、此处从流程能力入口再验一次）"
+    },
+    {
+      "id": "F5-09-keeper-write-allowed",
+      "query": "入库 RK2026101509 15241012-05-43 4",
+      "capability": "inventory_write",
+      "staff_id": "K001",
+      "enabled": true,
+      "expected": {},
+      "expect_permission_allowed": true,
+      "expect_pending_slots": { "direction": "in", "qty": 4 },
+      "notes": "放行侧 + 槽位保留：KEEPER 有 inventory.write → 流程可推进（此处只到确认前一步，不落库）；与 F5-08 仅身份不同，构成写库权限的对照对"
+    },
+    {
+      "id": "F5-10-replenish-no-flow-residue",
+      "query": "帮我生成鞋类补货计划",
+      "capability": "replenish",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_pending_slots": {},
+      "notes": "能力隔离护栏：补货不是出入库流程 → 不得在 state 里残留 pending_action（否则下一轮一句『确认』就可能误提交一张不存在的单据）"
+    }
+  ]
+}

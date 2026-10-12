@@ -1,0 +1,113 @@
+{
+  "dataset_id": "f4_permission_matrix",
+  "version": "1.0",
+  "scene": "F4 权限矩阵场",
+  "pass_line": 1.0,
+  "description": "F4 权限矩阵场（口径 2026-10-12）：按定稿权限矩阵（conf/roles.yaml，MANAGER/KEEPER/STAFF/TEMP × 5 权限点 inventory.read / inventory.write / dataquery.query / replenish.store / replenish.warehouse）逐格验证「放行」与「拒绝」两类结论。口径纪律：①TEMP 的 dataquery.query 是**放行**项（旧计划文字「TEMP 问销售额应拒」已作废，勿按旧文字改断言）；②「放行」用 expect_permission_allowed，拒绝用 expect_permission_denied（断言值与 permission_denied 字段同源，不靠文案猜）；③身份一律经 staff_id 走与在线同源的登录门禁（S007 停用 / T005 过期），不用 query 里自称角色。数据依赖：dim_staff（S001/S007/T001/T005/K001/M001）、fact_inventory_flow（RK2026101491 未占用）。",
+  "defaults": { "match_mode": "exact", "k": 5 },
+  "cases": [
+    {
+      "id": "F4-01-temp-dataquery-allowed",
+      "query": "国庆 7 天整体的销售额是多少？",
+      "capability": "dataquery",
+      "staff_id": "T001",
+      "enabled": true,
+      "expected": {},
+      "expect_permission_allowed": true,
+      "expect_sql_tables": ["fact_sales"],
+      "notes": "矩阵放行格：TEMP 拥有 dataquery.query（临时促销员也要能看业绩）→ 必须真跑到出 SQL。定稿 5 点见 conf/roles.yaml:37-39，旧计划里『TEMP 问销售额应拒』的文字已作废，不得据此反改断言"
+    },
+    {
+      "id": "F4-02-temp-inventory-read-allowed",
+      "query": "现在鞋类还有多少可用库存？",
+      "capability": "inventory",
+      "staff_id": "T001",
+      "enabled": true,
+      "expected": {},
+      "expect_permission_allowed": true,
+      "expect_sql_tables": ["dim_inventory_snapshot"],
+      "notes": "矩阵放行格：TEMP 拥有 inventory.read（现场叫货要用）→ 库存读侧不得被拦；『现在』口径在 golden 里用 MAX(snapshot_date) 表达（日切追加后左右同口径）"
+    },
+    {
+      "id": "F4-03-temp-flow-write-denied",
+      "query": "入库 RK2026101491 15241012-05-43 5",
+      "capability": "inventory",
+      "staff_id": "T001",
+      "enabled": true,
+      "expected": {},
+      "expect_permission_denied": "inventory.write",
+      "expect_pending_slots": {},
+      "notes": "矩阵拒绝格 + 时序：TEMP 无 inventory.write，flow_guard 必须在**建立 pending_action 之前**拒绝（否则会留下可被下轮确认的脏流程）——拒绝原因码与 permission_denied 字段同源"
+    },
+    {
+      "id": "F4-04-temp-replenish-denied",
+      "query": "帮我生成鞋类补货计划",
+      "capability": "replenish",
+      "staff_id": "T001",
+      "enabled": true,
+      "expected": {},
+      "expect_permission_denied": "replenish.store",
+      "notes": "矩阵拒绝格：TEMP 无 replenish.store，补货建议涉及门店经营决策"
+    },
+    {
+      "id": "F4-05-staff-replenish-denied",
+      "query": "帮我生成鞋类补货计划",
+      "capability": "replenish",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "expect_permission_denied": "replenish.store",
+      "notes": "矩阵拒绝格：STAFF（陈明）有 inventory.write 但**无** replenish.store——补货建议是店长/KEEPER 职责，同一员工『能登记出入库但不能定补货』是本场的关键区分度"
+    },
+    {
+      "id": "F4-06-keeper-store-replenish-allowed",
+      "query": "帮我生成鞋类补货计划",
+      "capability": "replenish",
+      "staff_id": "K001",
+      "enabled": true,
+      "expected": {},
+      "expect_permission_allowed": true,
+      "notes": "矩阵放行格：KEEPER（李慧）有 replenish.store → 门店补货建议放行。与 F4-05 同问句同能力、仅身份不同 → 唯一变量是权限，用来证『拒绝确实来自矩阵而非补货能力本身坏了』"
+    },
+    {
+      "id": "F4-07-keeper-warehouse-probe",
+      "query": "生成仓库补货建议",
+      "capability": "replenish",
+      "staff_id": "K001",
+      "enabled": true,
+      "expected": {},
+      "notes": "矩阵预留格（校准占位，暂不设断言）：replenish.warehouse 只给 MANAGER，且仓库补货能力当前**未注册**（启动日志：能力注册表 = dataquery/inventory/replenish/default）。本轮先如实记录路由去向与是否被拦，首跑后据实补断言；此例计入用例通过率但不计机制覆盖"
+    },
+    {
+      "id": "F4-08-manager-dataquery-allowed",
+      "query": "国庆 7 天整体的平均折扣率是多少？",
+      "capability": "dataquery",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_permission_allowed": true,
+      "expect_sql_tables": ["fact_sales"],
+      "notes": "矩阵全绿格：MANAGER 持全部 5 个权限点，作为『放行侧不漏判』的锚点（折扣率口径=实收/吊牌额，见 F8 场同题基线）"
+    },
+    {
+      "id": "F4-09-disabled-login-rejected",
+      "query": "你好",
+      "capability": "default",
+      "staff_id": "S007",
+      "enabled": true,
+      "expected": {},
+      "expect_login_rejected": "disabled",
+      "notes": "登录门禁：S007（dim_staff.status=停用）不得进图，原因码必须是 disabled。R1 的登录校验与在线同源（check_validity），若评测链路静默放行，本场所有拒绝格都会假通过"
+    },
+    {
+      "id": "F4-10-expired-login-rejected",
+      "query": "你好",
+      "capability": "default",
+      "staff_id": "T005",
+      "enabled": true,
+      "expected": {},
+      "expect_login_rejected": "expired",
+      "notes": "登录门禁：T005（valid_to=2026-08-31 已过期）原因码必须是 expired。与 F4-01 的 T001（valid_to=2026-10-12，当天仍有效）构成有效期边界回归锚点"
+    }
+  ]
+}

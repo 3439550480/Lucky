@@ -91,6 +91,7 @@ features:                     # [NEW] 模块开关（定义见 docs/design/00 §
     cost_metrics: true
     tool_metrics: true
     memory_metrics: true
+    assertion_metrics: true       # [R2] 机制断言（expect_* 字段判定）
 
 session:                      # [NEW] 上下文管理（05 文档 §2.1）
   history_max_turns: 10

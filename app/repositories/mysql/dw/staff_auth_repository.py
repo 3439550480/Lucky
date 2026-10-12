@@ -51,8 +51,12 @@ class StaffAuthRepository:
         return computed == digest
 
     @staticmethod
-    def _check_validity(row: dict, today: datetime.date) -> str | None:
-        """状态与有效期双关。通过返回 None，否则返回原因码"""
+    def check_validity(row: dict, today: datetime.date) -> str | None:
+        """状态与有效期双关。通过返回 None，否则返回原因码
+
+        [R1] 由私有转公开：评测 runner 注入 staff 时必须走**同一套**校验——
+        否则"停用/过期账号"在评测里会被放行，F4 权限矩阵假通过。
+        """
         if row["status"] != "启用":
             return "disabled"
         valid_from, valid_to = row.get("valid_from"), row.get("valid_to")
@@ -74,7 +78,7 @@ class StaffAuthRepository:
         if row is None:
             raise LoginRejected("bad_credentials", "工号或 PIN 不正确")
 
-        reason = self._check_validity(row, datetime.date.today())
+        reason = self.check_validity(row, datetime.date.today())
         if reason == "disabled":
             raise LoginRejected("disabled", "该账号已停用，请联系店长")
         if reason == "expired":

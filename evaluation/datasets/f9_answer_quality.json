@@ -1,0 +1,110 @@
+{
+  "dataset_id": "f9_answer_quality",
+  "version": "1.0",
+  "scene": "F9 答案质量场",
+  "pass_line": 0.75,
+  "description": "F9 答案质量场（口径 2026-10-12）：补上此前完全空白的最后一环——给店长看的那段**解释文本**。判据是 expect_explanation_grounded：解释里出现的每个数字都必须能在本轮真实来源中找到出处（result_sample / result_total / 查询句 / SQL 字面量 / date_info 日期 / replenish_plan），纯字符串匹配、零 LLM（方案 6.2 规则级）。口径纪律：①白名单刻意包含查询句与日期上下文——否则『入库 5 件』的 5、『10 月 7 日』的日期会被误判成幻觉（误伤比漏报更坏）；②因此用例问句尽量**不含**未受信数字，需要诱导编造的场景放 F7；③派生数字（差值/比例，如『比前一天增长 12%』）暂不在口径内，单列一条 disabled 校准用例记录该分歧；④本场通过线 0.75：解释层首次上评测，允许 2 例失败以暴露真实缺口。",
+  "defaults": { "match_mode": "exact", "k": 5 },
+  "cases": [
+    {
+      "id": "F9-01-inventory-total-grounded",
+      "query": "现在全店的可用库存合计是多少？",
+      "capability": "inventory",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "golden_sql": "SELECT SUM(available_qty) AS available_qty FROM dim_inventory_snapshot WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM dim_inventory_snapshot)",
+      "expect_sql_tables": ["dim_inventory_snapshot"],
+      "expect_explanation_grounded": true,
+      "notes": "复述型问句（最该做到零幻觉的形态）：256,011（10-09 快照）。解释里的总数、拆分数都必须能在 result_sample 里找到；golden 用 MAX(snapshot_date) 子查询，日切追加后左右同口径"
+    },
+    {
+      "id": "F9-02-sales-total-grounded",
+      "query": "国庆 7 天整体的销售额是多少？",
+      "capability": "dataquery",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "golden_sql": "SELECT ROUND(SUM(actual_amount), 2) AS amount FROM fact_sales WHERE date_id BETWEEN 20261001 AND 20261007",
+      "expect_sql_tables": ["fact_sales"],
+      "expect_explanation_grounded": true,
+      "notes": "核心经营数字：21,671,125.20（题库 Q1 基线）。这类回答最容易出现『顺手补一句同比增长/占比』的编造数字——正是本场要抓的形态"
+    },
+    {
+      "id": "F9-03-boundary-date-grounded",
+      "query": "昨天店里卖了多少钱？",
+      "capability": "dataquery",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_sql_tables": ["fact_sales"],
+      "expect_explanation_grounded": true,
+      "notes": "边界说明对账：昨天=2026-10-11（date_info.date=2026-10-12 换算），**超出**数据边界 20261001~20261009 → 回答里会出现『数据只到 10 月 9 日』这类日期表达。日期数字必须来自 date_info（_date_variants 覆盖『10月9日』等中文写法），不是幻觉"
+    },
+    {
+      "id": "F9-04-sku-stock-grounded",
+      "query": "15241012-05-43 现在还有多少可用库存？",
+      "capability": "inventory",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_sql_tables": ["dim_inventory_snapshot"],
+      "expect_explanation_grounded": true,
+      "notes": "单 SKU 复述：SKU 号本身来自查询句（白名单含 query 数字），库存数字来自 result_sample。单行结果的回答最容易『顺手把 SKU 号念错一位』——错位的数字不在白名单里会立刻暴露"
+    },
+    {
+      "id": "F9-05-replenish-plan-grounded",
+      "query": "帮我生成鞋类补货计划",
+      "capability": "replenish",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_permission_allowed": true,
+      "expect_explanation_grounded": true,
+      "notes": "补货解释对账：补货数量是规则算出来的（replenish_plan，不进 result_sample）→ 白名单专门补了 plan 行与 total_gap/total_suggest_qty 两类字段，否则整个补货场会被误判成幻觉（这就是把 plan 加进 _grounded_sources 的原因）"
+    },
+    {
+      "id": "F9-06-denied-reply-grounded",
+      "query": "帮我生成鞋类补货计划",
+      "capability": "replenish",
+      "staff_id": "S001",
+      "enabled": true,
+      "expected": {},
+      "expect_permission_denied": "replenish.store",
+      "expect_explanation_grounded": true,
+      "notes": "拒绝话术也进对账：权限拒绝走 intent_reply（非 messages），runner 的 _answer_text 会退化到它 → 保证 F9 覆盖『拒绝路径』的文本，不留检测盲区（拒绝话术里若冒出『预估缺口 3000 件』之类数字，同样是幻觉）"
+    },
+    {
+      "id": "F9-07-topn-recount-grounded",
+      "query": "国庆期间卖得最好的商品是哪个？",
+      "capability": "dataquery",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "expect_sql_tables": ["fact_sales"],
+      "expect_explanation_grounded": true,
+      "notes": "TopN 复述：不设 golden（行数不可控，见 F8 场口径③），但解释里的金额/件数必须来自 result_sample。TopN 场景模型容易把『第 1 名』的金额算成前几名之和——那种数字无来源，会被抓出来"
+    },
+    {
+      "id": "F9-08-broken-sku-count-grounded",
+      "query": "现在有多少个 SKU 断码了？",
+      "capability": "inventory",
+      "staff_id": "M001",
+      "enabled": true,
+      "expected": {},
+      "golden_sql": "SELECT COUNT(*) AS broken_sku FROM dim_inventory_snapshot WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM dim_inventory_snapshot) AND available_qty = 0",
+      "expect_sql_tables": ["dim_inventory_snapshot"],
+      "expect_explanation_grounded": true,
+      "notes": "计数型复述：100 个断码 SKU（10-09 快照）。计数题的正确性只由 golden 保证，解释层的『按品类拆成 34/51/15』这类拆分数字必须在 result_sample 里出现"
+    },
+    {
+      "id": "F9-09-derived-number-calibration",
+      "query": "国庆 7 天销售额比前一天（10-07）增长了多少？",
+      "capability": "dataquery",
+      "staff_id": "M001",
+      "enabled": false,
+      "expected": {},
+      "notes": "校准占位（disabled，不计入本场）：派生数字口径未定——『比前一天增长 12%』这类比值/差值由模型计算，不在任何真实来源里，按当前白名单会被判幻觉。需要先定产品口径（派生是否允许、允许到什么程度），定完再把本用例打开并写断言"
+    }
+  ]
+}

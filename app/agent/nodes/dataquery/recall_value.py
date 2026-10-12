@@ -47,7 +47,8 @@ async def recall_value(state: DataAgentState, runtime: Runtime[DataAgentContext]
         result = await chain.ainvoke({"query": query})
 
         # 通用关键词和字段值扩展词一起检索 ES，尽量提高真实取值召回率
-        keywords = set(keywords + result)
+        # [S5 可复现性] 保序去重（同上：set 迭代顺序随进程变化，取值顺序会漂）
+        keywords = list(dict.fromkeys(list(keywords) + list(result)))
 
         # 用 ValueInfo.id 去重，避免多个关键词命中同一条字段值记录
         value_infos_map: dict[str, ValueInfo] = {}

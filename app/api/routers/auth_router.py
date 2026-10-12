@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.agent.auth.auth_session_store import auth_session_store
 from app.agent.auth.roles import role_registry
-from app.agent.auth.staff_identity import StaffIdentity
+from app.agent.auth.staff_identity import StaffIdentity, build_staff_identity
 from app.api.dependencies import (
     get_current_staff,
     get_insights_repository,
@@ -46,13 +46,9 @@ async def login(
         request_id_ctx_var.set(uuid.uuid4())   # 保持日志上下文一致
         raise HTTPException(status_code=500, detail="登录服务暂不可用，请稍后重试") from e
 
-    role_codes = [c.strip() for c in (row["role_codes"] or "").split(",") if c.strip()]
-    identity = StaffIdentity(
-        staff_id=row["staff_id"],
-        name=row["name"],
-        role_codes=role_codes,
-        permissions=role_registry.resolve(role_codes),
-    )
+    # [R1] 身份组装收敛到 build_staff_identity —— 评测 staff 注入共用同一函数，
+    # 避免在线/评测两套组装逻辑漂移（权限点漏解析 = 权限矩阵假通过）
+    identity = build_staff_identity(row)
     session = auth_session_store.create(identity)
     return {
         "token": session.token,

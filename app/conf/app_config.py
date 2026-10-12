@@ -71,6 +71,7 @@ class EvaluationFlags:
     cost_metrics: bool = True        # 成本指标
     tool_metrics: bool = True        # 工具指标
     memory_metrics: bool = True      # 记忆指标
+    assertion_metrics: bool = True   # [R2] 机制断言（权限/表集合/继承/记忆注入/槽位/历史区…）
 
 # 总电闸箱
 @dataclass

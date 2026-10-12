@@ -1,6 +1,8 @@
 {
   "dataset_id": "eval_anta",
   "version": "1.0",
+  "scene": "F8 常规回归场",
+  "pass_line": 1.0,
   "description": "安踏特卖店 Agent 评测集（S4）——30 例：折扣机制 4 / 销售与维度 11 / 库存 5 / 补货 2 / 多轮 4 / 兜底与边界 4。口径纪律：①凡日期相关一律显式写死『国庆档 20261001~20261007』，因库中已被 daily_append 追加 20261008~20261009（docs/演示题库.md 维护约定 4）；②『现在』类库存口径在 golden 里用 MAX(snapshot_date) 子查询表达，日切追加后左右同口径；③TopN 类（排序+LIMIT）不设 golden_sql，因 result_sample 只取前 20 行、且 agent 返回行数不可控，设了会误伤 SQL 正确性；④expected.columns 用 meta_config.yaml 的『表名.字段名』id，expected.metrics 用 8 大指标名，expected.values 只声明问句字面出现的维度取值（取值召回是关键词驱动，字面不出现的值不该要求召回）。",
   "defaults": {
     "match_mode": "exact",
