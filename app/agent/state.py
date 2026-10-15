@@ -119,6 +119,10 @@ class DataAgentState(TypedDict):
     # [规则3 留档] S3b 设计拍板：inventory 复用问数链路（结果走 result 字段，不设
     # inventory_rows——原预留字段删除）；replenish 是固化算法单节点，结构化建议写这里
     replenish_plan: list[dict]  # 补货建议（replenish_plan 节点写入：固化算法输出 + 参数来源）
+    # [R2 可测性 2026-10-15] 补货总量统计（{"gap_skus","total_suggest_qty"}）：plan_rows 是给
+    # 前端的**截断**明细（_PLAN_EVENT_ROWS），而解释文本里的"缺口 N 个/合计 M 件"来自全量
+    # 统计（len(plan)/total_suggest）——不落 state 断言器拿不到，F9 防幻觉对账会把它判成幻觉
+    replenish_summary: dict
 
     # ==== R2 可测性字段（评测机制断言用）====
     # [R2 断言扩展] 这三个值原先只存在于节点内部局部变量里，评测无从断言"机制是否真生效"。

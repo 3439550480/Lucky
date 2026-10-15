@@ -16,7 +16,7 @@ from app.evaluation.assertions import aggregate_assertions
 from app.evaluation.cost_metrics import aggregate_costs, compute_case_cost
 from app.evaluation.intent_metrics import compute_intent_metrics
 from app.evaluation.retrieval_metrics import compute_retrieval_metrics
-from app.evaluation.runner import CaseResult, flags_snapshot
+from app.evaluation.runner import CaseResult, EvaluationRunner, flags_snapshot
 from app.evaluation.sql_metrics import compute_sql_metrics
 from app.evaluation.tool_metrics import compute_tool_metrics, extract_invoked_tools
 
@@ -188,7 +188,11 @@ def _cases_detail(results: list[CaseResult], meta: dict) -> list[dict]:
     out = []
     for r in results:
         item = {"id": r.case.id, "query": r.case.query,
-                "status": r.status, "error": r.error}
+                "status": r.status, "error": r.error,
+                # [R2] 解释文本原文留档：F9 防幻觉对账报 ungrounded 时，必须有原文才能
+                # 归因"数字从哪来"（真幻觉 vs 对账白名单漏来源），否则排查要整场重跑。
+                # 取法与断言 extra 同源（runner._answer_text：messages 末条 assistant → intent_reply）
+                "answer_text": EvaluationRunner._answer_text(r.final_state)}
         if r.final_state:
             fs = r.final_state
             item.update({

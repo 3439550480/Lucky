@@ -8,7 +8,7 @@
 
 动作（按顺序，每步独立可跳过）：
   1) 清 data/memory/*.json —— 先备份为 *.bak.<时间戳>，再置空为 []（记忆库空）
-  2) 探测数仓数据窗口（fact_order 的 min/max date_id）—— 演示口径要跟数据窗口对齐
+  2) 探测数仓数据窗口（fact_sales 的 min/max date_id）—— 演示口径要跟数据窗口对齐
   3) 打印「演示就绪」检查单（记忆库空 / 数据窗口 / 提交版本 / 可选冒烟结果）
 
 可选：
@@ -100,7 +100,7 @@ def clear_memory(store_path: str, backup: bool = True) -> dict:
 
 
 async def data_window() -> dict | None:
-    """探测数仓数据窗口（fact_order 的 min/max date_id）
+    """探测数仓数据窗口（fact_sales 的 min/max date_id）
 
     谁调用：main（检查单里"演示口径对齐"一行）
     设计 why：库中数据会被 daily_append 持续追加（见 docs/演示题库.md 维护约定 4），
@@ -112,9 +112,12 @@ async def data_window() -> dict | None:
     try:
         dw_mysql_client_manager.init()
         async with dw_mysql_client_manager.session_factory() as session:
+            # [缺陷留档 2026-10-13] 原版此处查 fact_order —— 旧项目（奶茶/电商方向）遗留表名，
+            # 安踏数仓没有这张表，探测恒走 except 返回 {"error": ...}，检查单「数据窗口已探测」永远为否。
+            # 修复版改为 fact_sales（安踏数仓核心事实表，daily_append 每日追加的就是它）。
             res = await session.execute(text(
                 "SELECT MIN(date_id) AS min_date, MAX(date_id) AS max_date, "
-                "COUNT(*) AS rows FROM fact_order"))
+                "COUNT(*) AS rows FROM fact_sales"))
             row = res.mappings().fetchone()
         return dict(row) if row else None
     except Exception as e:                      # 探不到不算失败：演示可能离线/库未起

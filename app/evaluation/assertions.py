@@ -26,7 +26,9 @@
     #   "actual": "inventory.write", "passed": True, "note": ""}, ...]
     assertion_summary(rows)          # {"total": 3, "passed": 2, "failed": 1, "unevaluated": 0}
 """
+import datetime
 import re
+from decimal import Decimal
 
 # SQL 表名抽取：(1) JOIN 目标；(2) 每个 FROM 关键字之后的表列表
 # 两处都不能省：
@@ -294,6 +296,11 @@ def _number_variants(value) -> set[str]:
     variants: set[str] = set()
     if isinstance(value, bool) or value is None:         # bool 是"是/否"不是数量，不进对账池
         return variants
+    # [缺陷留档 2026-10-15] 原版只认 int/float/str——MySQL SUM() 等聚合经 asyncmy 返回
+    # Decimal，在此被静默丢弃 → "查询结果被自己的对账器判成幻觉"（F9-01/02/03 假失败根因）。
+    # 修复：Decimal 先转 float 再走统一分支（金额 ≤9 位有效数字，float 精度足够）。
+    if isinstance(value, Decimal):
+        value = float(value)
     if isinstance(value, (int, float)):
         for token in (str(value), f"{value:,.0f}", f"{value:.1f}", f"{value:.2f}"):
             variants.add(_norm_number(token))
@@ -315,6 +322,32 @@ def _date_variants(text: str) -> set[str]:
         for token in (f"{y}年{int(mo)}月{int(d)}日", f"{mo}月{int(d)}日", f"{int(mo)}月{int(d)}日",
                       f"{mo}-{d}", f"{int(mo)}-{int(d)}", f"{y}{mo}{d}"):
             out |= _number_variants(token)
+    return out
+
+
+def _date_span_variants(start_iso: str, end_iso: str) -> set[str]:
+    """日期区间逐日展开成写法变体（"10月8日""10-8""20261008" 都算区间内真实来源）
+
+    谁调用：_grounded_sources（data_range 与 SQL 里的 8 位日期字面量两处）
+    设计 why：解释层常引用区间内**任意一天**（"10/08-10/09 可再复核"），原版只把区间
+    端点入池，中间日被误判成幻觉（F9-07 假失败根因）。变体形态复用 _date_variants。
+    防御：跨度上限 92 天（一个季度），异常/超宽区间放弃展开——宁漏勿滥，不让对账池被灌爆。
+
+    示例：sorted(_date_span_variants("2026-10-01", "2026-10-02"))[:3]
+          → ["1", "10", "10-1"]（含两天全部变体：10月1日/10月2日/20261001/20261002…）
+    """
+    out: set[str] = set()
+    try:
+        d0 = datetime.date.fromisoformat(start_iso)
+        d1 = datetime.date.fromisoformat(end_iso)
+    except ValueError:
+        return out
+    if d1 < d0:
+        d0, d1 = d1, d0
+    if (d1 - d0).days > 92:
+        return out
+    for i in range((d1 - d0).days + 1):
+        out |= _date_variants((d0 + datetime.timedelta(days=i)).isoformat())
     return out
 
 
@@ -340,19 +373,52 @@ def _grounded_sources(final_state: dict) -> set[str]:
     allowed |= _number_variants(final_state.get("sql"))       # SQL 字面量（LIMIT / where 取值）
     # 补货计划是规则算出来的结构化结果（不进 result_sample，但它是解释文本的数字来源：
     # "鞋类建议补 5,681 件"里的每个数都必须能在 plan 行里找到）——不加这条 F9 会误伤补货场
+    # [缺陷留档 2026-10-15] 原版只处理 dict 形态（SSE 事件 {plan,total_gap,...}），而节点
+    # 写回 state 的是 list[dict]（replenish_plan.py: return {"replenish_plan": plan_rows}），
+    # list 被整段跳过 → 补货解释里的数字全被判幻觉（F9-05 假失败根因）。两种形态都取行。
     plan = final_state.get("replenish_plan")
     if isinstance(plan, dict):
-        rows = plan.get("plan") or plan.get("rows") or []
-        for row in rows if isinstance(rows, list) else []:
+        for v in (plan.get("total_gap"), plan.get("total_suggest_qty")):
+            allowed |= _number_variants(v)
+        plan = plan.get("plan") or plan.get("rows") or []
+    if isinstance(plan, list):
+        for row in plan:
             if isinstance(row, dict):
                 for v in row.values():
                     allowed |= _number_variants(v)
-        for v in (plan.get("total_gap"), plan.get("total_suggest_qty")):
-            allowed |= _number_variants(v)
     date_info = final_state.get("date_info") or {}
     for key in ("date", "quarter", "data_range"):
         allowed |= _number_variants(date_info.get(key))
-    allowed |= _date_variants(date_info.get("data_range") or "")
+    # [缺陷留档 2026-10-15] 日期来源原版只有 data_range 的**端点**——解释层常引用区间内
+    # 任意一天（"10/08-10/09 可再复核"）与相对日期（"昨天=10-14"，由【今天】推导），
+    # 都不是幻觉却被判 ungrounded（F9-03/07 假失败根因）。修复三路：
+    # ①data_range 逐日展开；②SQL 里的 8 位日期字面量（BETWEEN 20261001 AND 20261007）
+    #   逐日展开——"按国庆 7 天统计"的 7 就是区间天数，端点变体里没有它；
+    # ③date_info.date 的 ±1 天（昨天/明天是解释层最常用的相对日期）。
+    rng = date_info.get("data_range") or ""
+    iso_days = [m.group() for m in _DATE_RE.finditer(rng)]
+    if len(iso_days) >= 2:
+        allowed |= _date_span_variants(iso_days[0], iso_days[-1])
+    else:
+        allowed |= _date_variants(rng)
+    ymd = sorted({int(x) for x in re.findall(r"\b20\d{6}\b", final_state.get("sql") or "")})
+    if len(ymd) >= 2:
+        s, e = f"{ymd[0]:08d}", f"{ymd[-1]:08d}"
+        allowed |= _date_span_variants(f"{s[:4]}-{s[4:6]}-{s[6:]}",
+                                       f"{e[:4]}-{e[4:6]}-{e[6:]}")
+    for m in _DATE_RE.finditer(date_info.get("date") or ""):
+        allowed |= _date_variants(m.group())
+        try:
+            base = datetime.date.fromisoformat(m.group())
+        except ValueError:
+            continue
+        for delta in (-1, 1):                       # 昨天 / 明天
+            allowed |= _date_variants((base + datetime.timedelta(days=delta)).isoformat())
+    # [R2 可测性 2026-10-15] 补货全量统计（state.replenish_summary）：解释层"缺口 235 个/
+    # 合计 5657 件"来自 len(plan)/total_suggest，plan_rows 是截断明细、覆盖不到这两个数
+    summary = final_state.get("replenish_summary") or {}
+    for v in (summary.get("gap_skus"), summary.get("total_suggest_qty")):
+        allowed |= _number_variants(v)
     return allowed
 
 

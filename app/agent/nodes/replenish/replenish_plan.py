@@ -217,7 +217,13 @@ async def replenish_plan(state: DataAgentState, runtime: Runtime[DataAgentContex
         else:
             messages = list(state.get("messages", []))
             messages.append({"role": "assistant", "content": explanation})
-        return {"replenish_plan": plan_rows, "messages": messages}
+        # [R2 可测性 2026-10-15] 全量统计随 return 落 state（诊断输出，不参与算法）：
+        # plan_rows 只留前 N 行给前端，解释层的"缺口 235 个/合计 5657 件"来自全量
+        # len(plan)/total_suggest——评测 F9 对账必须能拿到同一来源，否则假失败
+        return {"replenish_plan": plan_rows,
+                "replenish_summary": {"gap_skus": len(plan),
+                                      "total_suggest_qty": total_suggest},
+                "messages": messages}
 
     except Exception as e:
         logger.error(f"{step} failed: {e}")
